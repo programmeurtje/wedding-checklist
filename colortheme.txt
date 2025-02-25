@@ -1,0 +1,5 @@
+Buttons: DA6F57
+Achtergrond 1: FFF9F6
+Achtergrond 2 (wit): FFFFFF
+Achtergrond 3 (details): F7F9FC
+Tekst (zwart): 333333
