@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router, useRouter } from 'expo-router';
 
 export default function SettingsScreen() {
   const [weddingDate, setWeddingDate] = useState('');
@@ -29,6 +30,17 @@ export default function SettingsScreen() {
     }
   };
 
+  const clearCache = async () => {
+    try {
+      await AsyncStorage.clear();
+      alert('Cache cleared!');
+      setWeddingDate(''); // Clear the wedding date in the state as well
+      
+    } catch (error) {
+      console.error('Failed to clear cache', error);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Settings</Text>
@@ -40,6 +52,9 @@ export default function SettingsScreen() {
       />
       <TouchableOpacity style={styles.saveButton} onPress={saveWeddingDate}>
         <Text style={styles.saveButtonText}>Save</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.clearButton} onPress={clearCache}>
+        <Text style={styles.clearButtonText}>Clear Cache</Text>
       </TouchableOpacity>
     </View>
   );
@@ -61,6 +76,14 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
     alignItems: 'center',
+    marginBottom: 10,
   },
   saveButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  clearButton: {
+    backgroundColor: '#DA6F57',
+    padding: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  clearButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
 });
