@@ -208,13 +208,13 @@ export default function ChecklistScreen() {
         }
       />
 
-      {/* Navigate to Completed Tasks */}
+      {/* Navigate to Completed Tasks
       <TouchableOpacity
         style={styles.completedButton}
         onPress={() => router.push("/(tabs)/CompletedTaskScreen")}
       >
         <Text style={styles.buttonText}>View Completed Tasks</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </View>
   );
 }
@@ -296,15 +296,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#A9A9A9",
   },
-  //taskTextContainer: { flex: 1, marginLeft: 10, flexDirection: "row", alignItems: "center" },
-  //taskText: { fontSize: 16, color: "#DA6F57" },
-  // verticalLine: {
-  //   width: 3,
-  //   alignSelf: "stretch",
-  //   backgroundColor: '#DA6F57',
-  //   marginHorizontal: 10,
-  // },
-  // taskLink: { fontSize: 14, color: "#A9A9A9", textDecorationLine: "underline" },
   completedTaskText: {
     textDecorationLine: "line-through",
     color: "#888",

@@ -1,0 +1,11 @@
+# Developer Notes and Tasks
+
+## Notes
+- De AsyncStorage van CompleteTasks wordt nu gecheckt bij het afvinken van een taak. 
+Dit is alleen voor het moment van ontwikkelen belangrijk. Dit mag weggehaalt worden na ontwikkelingsfase.
+
+## Tasks
+
+
+## Future Enhancements
+- Collaborative function (to work together with your spouse)
