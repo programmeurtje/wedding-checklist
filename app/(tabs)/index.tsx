@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,151 +7,311 @@ import {
   FlatList,
   StyleSheet,
   Linking,
+  Platform,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { CheckBox } from "react-native-elements";
 import WeddingDateModal from "../../components/WeddingDateModal";
 import uuid from "react-native-uuid";
+import { format } from "date-fns";
 
-// Define Task Type
-type Task = {
-  id: string;
-  text: string;
-  completed: boolean;
-  date?: string;
-  link?: string;
-};
-
-const defaultTasks: Task[] = [
-  {
-    id: uuid.v4() as string,
-    text: "Book Venue",
-    completed: false,
-    link: "https://www.example.com/book-venue",
-  },
-  {
-    id: uuid.v4() as string,
-    text: "Hire Photographer",
-    completed: false,
-    link: "https://www.example.com/hire-photographer",
-  },
-  {
-    id: uuid.v4() as string,
-    text: "Send Invitations",
-    completed: false,
-    link: "https://www.example.com/send-invitations",
-  },
-];
+import { ASYNC_STORAGE_KEYS, Task } from "../../constants/appConfig";
+import { defaultTasks as defaultTaskTemplates } from "../../data/defaultTasks";
+import {
+  calculateDateFromWedding,
+  isValidDateString,
+} from "../../utils/dateUtils";
 
 export default function ChecklistScreen() {
-  const [tasks, setTasks] = useState<Task[]>(defaultTasks);
-  const [newTask, setNewTask] = useState<string>("");
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [newTaskText, setNewTaskText] = useState<string>("");
   const [weddingDate, setWeddingDate] = useState<string | null>(null);
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [isDateModalVisible, setIsDateModalVisible] = useState<boolean>(false);
   const router = useRouter();
 
-  useEffect(() => {
-    checkWeddingDate();
-    loadTasks();
-  }, []);
+  // --- Data Loading and Initialization ---
 
-  const checkWeddingDate = async () => {
-    try {
-      const storedDate = await AsyncStorage.getItem("weddingDate");
-      if (!storedDate) {
-        setModalVisible(true);
-      } else {
-        setWeddingDate(storedDate);
+  // Function to calculate dates for all tasks based on the wedding date
+  const calculateAllTaskDates = useCallback(
+    (tasks: Task[], currentWeddingDate: string | null): Task[] => {
+      if (!isValidDateString(currentWeddingDate)) {
+        return tasks.map((task) => ({ ...task, calculatedDate: undefined }));
       }
-    } catch (error) {
-      console.error("Failed to load wedding date", error);
-    }
-  };
+      return tasks.map((task) => ({
+        ...task,
+        calculatedDate: calculateDateFromWedding(
+          currentWeddingDate,
+          task.relativeDueDate
+        ),
+      }));
+    },
+    []
+  );
 
-  const loadTasks = async () => {
+  // Load wedding date and tasks
+  const loadAppData = useCallback(async () => {
+    setIsLoading(true);
     try {
-      const storedTasks = await AsyncStorage.getItem("tasks");
+      const storedDate = await AsyncStorage.getItem(
+        ASYNC_STORAGE_KEYS.WEDDING_DATE
+      );
+      const storedTasks = await AsyncStorage.getItem(ASYNC_STORAGE_KEYS.TASKS);
+
+      let currentWeddingDate = isValidDateString(storedDate)
+        ? storedDate
+        : null;
+      setWeddingDate(currentWeddingDate);
+
+      let tasksToProcess: Task[] = [];
+
       if (storedTasks) {
-        setTasks(JSON.parse(storedTasks) as Task[]);
+        tasksToProcess = JSON.parse(storedTasks) as Task[];
+        tasksToProcess = calculateAllTaskDates(
+          tasksToProcess,
+          currentWeddingDate
+        );
       } else {
-        await AsyncStorage.setItem("tasks", JSON.stringify(defaultTasks));
-        setTasks(defaultTasks);
+        tasksToProcess = defaultTaskTemplates.map((template) => ({
+          ...template,
+          id: uuid.v4() as string,
+          completed: false,
+          calculatedDate: calculateDateFromWedding(
+            currentWeddingDate,
+            template.relativeDueDate
+          ),
+        }));
+        await AsyncStorage.setItem(
+          ASYNC_STORAGE_KEYS.TASKS,
+          JSON.stringify(tasksToProcess)
+        );
+      }
+
+      setAllTasks(tasksToProcess);
+
+      // Prompt for date if not set
+      if (!currentWeddingDate) {
+        setIsDateModalVisible(true);
       }
     } catch (error) {
-      console.error("Error loading tasks:", error);
+      console.error("Error loading app data:", error);
+      Alert.alert("Error", "Could not load your checklist data.");
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [calculateAllTaskDates]);
 
-  // Save tasks to AsyncStorage
+  // Load data on initial mount
+  useEffect(() => {
+    loadAppData();
+  }, [loadAppData]);
+
+  // Refresh data when the screen comes into focus (e.g., after changing date in settings)
+  useFocusEffect(
+    useCallback(() => {
+      const checkDate = async () => {
+        const storedDate = await AsyncStorage.getItem(
+          ASYNC_STORAGE_KEYS.WEDDING_DATE
+        );
+        const currentValidDate = isValidDateString(storedDate)
+          ? storedDate
+          : null;
+        if (currentValidDate !== weddingDate) {
+          console.log("Wedding date change detected, reloading data...");
+          loadAppData();
+        }
+      };
+      if (!isLoading) {
+        checkDate();
+      }
+    }, [loadAppData, weddingDate, isLoading])
+  );
+
+  // --- Task Management ---
+
   const saveTasks = async (updatedTasks: Task[]) => {
     try {
-      await AsyncStorage.setItem("tasks", JSON.stringify(updatedTasks));
-      setTasks(updatedTasks);
+      setAllTasks(updatedTasks);
+      await AsyncStorage.setItem(
+        ASYNC_STORAGE_KEYS.TASKS,
+        JSON.stringify(updatedTasks)
+      );
     } catch (error) {
       console.error("Error saving tasks:", error);
+      Alert.alert("Error", "Could not save your task changes.");
     }
   };
 
-  // Add new task
   const addTask = () => {
-    if (!newTask.trim()) return; // Prevent empty tasks
+    if (!newTaskText.trim()) return;
     const newTaskObj: Task = {
       id: uuid.v4() as string,
-      text: newTask,
+      text: newTaskText.trim(),
       completed: false,
     };
-    const updatedTasks = [...tasks, newTaskObj];
-
-    saveTasks(updatedTasks);
-    setNewTask(""); // Clear input field
+    saveTasks([newTaskObj, ...allTasks]);
+    setNewTaskText("");
   };
 
-  // Mark task as completed
-  const completeTask = async (task: Task) => {
-    const updatedTasks = tasks.filter((t) => t.id !== task.id);
-    const completedTask = { ...task, completed: true };
-    const completedTasks = await getCompletedTasks();
-
-    // Check if the task is already in the completed tasks list
-    if (!completedTasks.some((t) => t.id === task.id)) {
-      completedTasks.push(completedTask);
-    }
-
-    await AsyncStorage.setItem("tasks", JSON.stringify(updatedTasks));
-    await AsyncStorage.setItem(
-      "completedTasks",
-      JSON.stringify(completedTasks)
+  const toggleTaskCompletion = (taskId: string) => {
+    const updatedTasks = allTasks.map((task) =>
+      task.id === taskId ? { ...task, completed: !task.completed } : task
     );
-
-    setTasks(updatedTasks);
+    saveTasks(updatedTasks);
   };
 
-  // Get completed tasks from AsyncStorage
-  const getCompletedTasks = async (): Promise<Task[]> => {
-    const storedCompletedTasks = await AsyncStorage.getItem("completedTasks");
-    return storedCompletedTasks
-      ? (JSON.parse(storedCompletedTasks) as Task[])
-      : [];
+  // --- Wedding Date Handling ---
+  const handleSaveWeddingDate = async (newDate: string) => {
+    try {
+      await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.WEDDING_DATE, newDate);
+      setWeddingDate(newDate);
+      const updatedTasks = calculateAllTaskDates(allTasks, newDate);
+      saveTasks(updatedTasks);
+      setIsDateModalVisible(false);
+    } catch (error) {
+      console.error("Failed to save wedding date:", error);
+      Alert.alert("Error", "Could not save the wedding date.");
+    }
   };
+
+  // --- Filtering and Sorting for Display ---
+  const incompleteTasks = useMemo(() => {
+    return allTasks
+      .filter((task) => !task.completed)
+      .sort((a, b) => {
+        const dateA = a.calculatedDate
+          ? new Date(
+              calculateDateFromWedding(weddingDate, a.relativeDueDate) || 0
+            )
+          : null;
+        const dateB = b.calculatedDate
+          ? new Date(
+              calculateDateFromWedding(weddingDate, b.relativeDueDate) || 0
+            )
+          : null;
+
+        if (dateA && dateB) return dateA.getTime() - dateB.getTime();
+        if (dateA && !dateB) return -1;
+        if (!dateA && dateB) return 1;
+        return 0;
+      });
+  }, [allTasks, weddingDate]);
+
+  // --- Render Functions ---
+  const renderTaskItem = ({ item }: { item: Task }) => {
+    const handleLinkPress = () => {
+      if (item.link) {
+        Linking.openURL(item.link).catch((err) =>
+          console.error("Couldn't load page", err)
+        );
+      }
+    };
+
+    return (
+      <View style={styles.taskCard}>
+        {/* Row for Checkbox and Main Content */}
+        <View style={styles.taskRow}>
+          <CheckBox
+            checked={item.completed}
+            onPress={() => toggleTaskCompletion(item.id)}
+            checkedColor="#DA6F57"
+            uncheckedColor="#BDBDBD"
+            containerStyle={styles.checkboxContainer}
+            size={24}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 0 }}
+          />
+          <View style={styles.mainContent}>
+            <Text style={styles.taskTitle}>{item.text}</Text>
+          </View>
+        </View>
+
+        {/* Row for Details (Date & Link) - only shown if they exist */}
+        {(item.calculatedDate || item.link) && (
+          <View style={styles.detailsRow}>
+            <View style={styles.detailsSpacer} />
+            {/* Indent details */}
+            {item.calculatedDate && (
+              <View style={styles.detailItem}>
+                <MaterialIcons
+                  name="calendar-today"
+                  size={14}
+                  color={styles.detailText.color}
+                  style={styles.iconStyle}
+                />
+                <Text style={styles.detailText}>{item.calculatedDate}</Text>
+              </View>
+            )}
+            {item.calculatedDate && item.link && (
+              <View style={styles.detailSeparator} />
+            )}{" "}
+            {/* Separator */}
+            {item.link && (
+              <TouchableOpacity
+                onPress={handleLinkPress}
+                style={styles.detailItem}
+              >
+                <MaterialIcons
+                  name="lightbulb-outline"
+                  size={16}
+                  color={styles.linkText.color}
+                  style={styles.iconStyle}
+                />
+                <Text style={styles.linkText}>Inspire me!</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // --- Main Return ---
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#DA6F57" />
+        <Text style={styles.loadingText}>Loading your checklist...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <WeddingDateModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
+        visible={isDateModalVisible}
+        onClose={() => {
+          if (weddingDate) {
+            setIsDateModalVisible(false);
+          } else {
+            Alert.alert(
+              "Wedding Date Required",
+              "Please set your wedding date to continue."
+            );
+          }
+        }}
+        onSaveDate={handleSaveWeddingDate}
       />
-      <Text style={styles.title}>Wedding Planner Checklist</Text>
 
-      {/* Task Input Field */}
+      <Text style={styles.title}>
+        {weddingDate
+          ? `Wedding: ${format(new Date(weddingDate), "MMMM dd, yyyy")}`
+          : "Wedding Checklist"}
+      </Text>
+
+      {/* Task Input */}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
-          placeholder="Add a new task..."
-          value={newTask}
-          onChangeText={setNewTask}
-          onSubmitEditing={addTask} // Add task when Enter key is pressed
+          placeholder="Add a custom task..."
+          value={newTaskText}
+          onChangeText={setNewTaskText}
+          onSubmitEditing={addTask}
+          returnKeyType="done"
         />
         <TouchableOpacity style={styles.addButton} onPress={addTask}>
           <Text style={styles.addButtonText}>+</Text>
@@ -160,153 +320,161 @@ export default function ChecklistScreen() {
 
       {/* Task List */}
       <FlatList
-        data={tasks}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.taskCard,
-              item.completed && styles.completedTaskCard,
-            ]}
-          >
-            <View style={styles.taskContent}>
-              <CheckBox
-                checked={item.completed}
-                onPress={() => completeTask(item)}
-                checkedColor="#DA6F57"
-                containerStyle={styles.checkboxContainer}
-              />
-              <View style={styles.taskContainer}>
-                <View style={styles.taskTextWrapper}>
-                  <Text
-                    style={[
-                      styles.taskText,
-                      item.completed && styles.completedTaskText,
-                    ]}
-                  >
-                    {item.text}
-                  </Text>
-                </View>
-                {item.link && (
-                  <View style={styles.taskLinkWrapper}>
-                    <View style={styles.verticalLine} />
-                    <Text
-                      style={styles.taskLink}
-                      onPress={() => item.link && Linking.openURL(item.link)}
-                    >
-                      Inspire me!
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            {item.date && <Text style={styles.taskDate}>{item.date}</Text>}
-          </TouchableOpacity>
-        )}
+        data={incompleteTasks}
+        renderItem={renderTaskItem}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={<Text style={styles.listHeader}>Your Tasks</Text>}
         ListEmptyComponent={
-          <Text style={styles.emptyText}>No tasks available</Text>
+          <Text style={styles.emptyText}>
+            {allTasks.length > 0
+              ? "Woohoo! All tasks completed!"
+              : "No tasks yet. Add one!"}
+          </Text>
         }
+        contentContainerStyle={styles.listContentContainer}
       />
-
-      {/* Navigate to Completed Tasks
-      <TouchableOpacity
-        style={styles.completedButton}
-        onPress={() => router.push("/(tabs)/CompletedTaskScreen")}
-      >
-        <Text style={styles.buttonText}>View Completed Tasks</Text>
-      </TouchableOpacity> */}
     </View>
   );
 }
 
-// Styles
+// --- Styles ---
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#FFF9F6" },
-  title: { fontSize: 24, fontWeight: "bold", marginBottom: 10 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFF9F6",
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#DA6F57",
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 15,
+    paddingTop: Platform.OS === "android" ? 30 : 50,
+    backgroundColor: "#FFF9F6",
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 15,
+    color: "#333",
+    textAlign: "center",
+  },
   inputContainer: {
     flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 20,
   },
   input: {
     flex: 1,
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
     borderWidth: 1,
-    borderColor: "#DA6F57",
-    borderRadius: 10,
-    backgroundColor: "#FFF",
+    borderColor: "#E0E0E0",
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    fontSize: 16,
   },
   addButton: {
     marginLeft: 10,
     backgroundColor: "#DA6F57",
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 20,
+    paddingHorizontal: 15,
     alignItems: "center",
     justifyContent: "center",
   },
-  addButtonText: { color: "#FFF", fontSize: 20, fontWeight: "bold" },
-
-  //Task Styles
-  taskCard: {
-    padding: 5,
-    marginVertical: 5,
-    backgroundColor: "#F7F9FC",
-    borderRadius: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+  addButtonText: {
+    color: "#FFF",
+    fontSize: 24,
+    fontWeight: "bold",
+    lineHeight: 26,
   },
-  completedTaskCard: {
-    backgroundColor: "#E0E0E0",
+  listContentContainer: {
+    paddingBottom: 20,
   },
-  taskContent: { flexDirection: "row", alignItems: "center" },
-  checkboxContainer: {
-    margin: 0,
-    padding: 0,
-  },
-  taskContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  taskTextWrapper: {
-    flex: 1,
-    paddingRight: 5,
-  },
-  taskText: {
-    flexWrap: "wrap",
-    fontSize: 16,
+  listHeader: {
+    fontSize: 18,
+    fontWeight: "600",
     color: "#DA6F57",
+    marginBottom: 10,
+    marginLeft: 5,
   },
-  taskLinkWrapper: {
+  // --- Task Card Styles ---
+  taskCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F5F5F5",
+  },
+
+  taskRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
+    paddingLeft: 5,
+    paddingRight: 10,
   },
-  verticalLine: {
-    width: 3,
-    alignSelf: "stretch",
-    backgroundColor: "#DA6F57",
-    marginRight: 15,
+  checkboxContainer: {
+    padding: 0,
+    margin: 0,
+    marginRight: 5,
   },
-  taskLink: {
-    fontSize: 14,
-    color: "#A9A9A9",
+  mainContent: {
+    flex: 1,
   },
-  completedTaskText: {
-    textDecorationLine: "line-through",
+  taskTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#333",
+    flexWrap: "wrap",
+  },
+  detailsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    paddingLeft: 5,
+    paddingRight: 10,
+    flexWrap: "wrap",
+  },
+  detailsSpacer: {
+    width: 24 + 5,
+  },
+  detailItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  detailSeparator: {
+    width: 1,
+    height: 14,
+    backgroundColor: "#E0E0E0",
+    marginHorizontal: 8,
+  },
+  iconStyle: {
+    marginRight: 4,
+  },
+  detailText: {
+    fontSize: 13,
+    color: "#757575",
+  },
+  linkText: {
+    fontSize: 13,
+    color: "#DA6F57",
+    fontWeight: "500",
+  },
+  emptyText: {
+    textAlign: "center",
+    marginTop: 40,
+    fontSize: 16,
     color: "#888",
   },
-  taskDate: { fontSize: 14, color: "#888" },
-  emptyText: { textAlign: "center", marginTop: 20, color: "#888" },
-  completedButton: {
-    padding: 15,
-    backgroundColor: "#DA6F57",
-    borderRadius: 10,
-    marginTop: 20,
-  },
-  buttonText: { textAlign: "center", color: "#FFF", fontWeight: "bold" },
 });
