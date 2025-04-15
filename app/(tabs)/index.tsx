@@ -230,11 +230,11 @@ export default function ChecklistScreen() {
         </View>
 
         {/* Row for Details (Date & Link) - only shown if they exist */}
-        {(item.calculatedDate || item.link) && (
+        {(item.calculatedDate || item.link) ? (
           <View style={styles.detailsRow}>
             <View style={styles.detailsSpacer} />
             {/* Indent details */}
-            {item.calculatedDate && (
+            {item.calculatedDate ? (
               <View style={styles.detailItem}>
                 <MaterialIcons
                   name="calendar-today"
@@ -244,12 +244,12 @@ export default function ChecklistScreen() {
                 />
                 <Text style={styles.detailText}>{item.calculatedDate}</Text>
               </View>
-            )}
-            {item.calculatedDate && item.link && (
+            ):  null}
+            {item.calculatedDate && item.link ? (
               <View style={styles.detailSeparator} />
-            )}{" "}
+            ):null}{" "}
             {/* Separator */}
-            {item.link && (
+            {item.link ? (
               <TouchableOpacity
                 onPress={handleLinkPress}
                 style={styles.detailItem}
@@ -262,9 +262,9 @@ export default function ChecklistScreen() {
                 />
                 <Text style={styles.linkText}>Inspire me!</Text>
               </TouchableOpacity>
-            )}
+            ): null}
           </View>
-        )}
+        ): null}
       </View>
     );
   };

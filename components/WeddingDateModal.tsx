@@ -89,7 +89,7 @@ export default function WeddingDateModal({ visible, onClose, onSaveDate }: Weddi
           {/* --- DateTimePicker Component --- */}
           {/* Conditionally render for Android based on showPicker state */}
           {/* Always rendered but might be hidden on iOS if using 'default' display */}
-          {showPicker && (
+          {showPicker ? (
               <DateTimePicker
                   testID="dateTimePicker"
                   value={date}
@@ -99,7 +99,7 @@ export default function WeddingDateModal({ visible, onClose, onSaveDate }: Weddi
                   minimumDate={new Date(new Date().setHours(0, 0, 0, 0))} // Today is the minimum
                   style={styles.datePicker} // Apply style, especially for iOS spinner width
               />
-          )}
+          ): null}
 
           {/* Action Buttons */}
           <View style={styles.buttonContainer}>

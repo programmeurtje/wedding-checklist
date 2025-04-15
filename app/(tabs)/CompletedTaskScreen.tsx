@@ -116,12 +116,12 @@ export default function CompletedTaskScreen() {
                     </TouchableOpacity>
                     <View style={styles.taskTextContainer}>
                         <Text style={styles.taskText}>{item.text}</Text>
-                        {item.calculatedDate && <Text style={styles.detailText}>{item.calculatedDate}</Text>}
-                        {item.link && (
+                        {item.calculatedDate ? <Text style={styles.detailText}>{item.calculatedDate}</Text>:null}
+                        {item.link ? (
                             <TouchableOpacity onPress={handleLinkPress} disabled={!item.link} style={styles.linkWrapper}>
                                 <Text style={[styles.linkText, !item.link && styles.disabledLink]}>Inspire me!</Text>
                             </TouchableOpacity>
-                        )}
+                        ): null}
                     </View>
                      <TouchableOpacity onPress={() => deleteTask(item.id)} style={styles.deleteButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                         <MaterialIcons name="delete-outline" size={24} color="#AAA" />
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 24,
         fontWeight: "bold",
-        color: "#333", // Consistent title color
+        color: "#333",
         marginBottom: 20,
         textAlign: 'center',
     },
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
         paddingBottom: 20,
     },
     taskCard: {
-        backgroundColor: "#F5F5F5", // Greyed background
+        backgroundColor: "#F5F5F5",
         borderRadius: 12,
         marginBottom: 10,
         paddingVertical: 12,
@@ -212,14 +212,14 @@ const styles = StyleSheet.create({
         textDecorationLine: "line-through",
         marginTop: 2,
     },
-    linkWrapper: { // Wrap link text for potential touch handling/styling
+    linkWrapper: {
       marginTop: 4,
     },
     linkText: {
         fontSize: 12,
-        color: '#DA6F57', // Keep link color? Or dim?
+        color: '#DA6F57', 
         textDecorationLine: "line-through",
-        opacity: 0.7, // Slightly faded link
+        opacity: 0.7, 
     },
     disabledLink: {
        opacity: 0.4,

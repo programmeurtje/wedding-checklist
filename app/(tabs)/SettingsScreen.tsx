@@ -136,7 +136,7 @@ export default function SettingsScreen() {
 
       {/* --- DateTimePicker Component --- */}
       {/* Always mounted on iOS if display='inline', conditionally on Android */}
-      {showPicker && (
+      {showPicker ? (
           <DateTimePicker
               testID="dateTimePicker"
               value={weddingDate || new Date()} // Use current date or default if null
@@ -149,7 +149,7 @@ export default function SettingsScreen() {
               minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
               // No specific style needed for 'default' display usually
           />
-      )}
+      ): null}
 
       {/* --- Action Buttons --- */}
       {/* Add some space if the picker is not shown (especially iOS inline) */}
