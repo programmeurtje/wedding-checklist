@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  SectionList,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -17,7 +18,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { CheckBox } from "react-native-elements";
 import WeddingDateModal from "../../components/WeddingDateModal";
 import uuid from "react-native-uuid";
-import { format } from "date-fns";
+import { format, parse, parseISO, isValid, compareAsc, addDays } from "date-fns";
 
 import { ASYNC_STORAGE_KEYS, Task } from "../../constants/appConfig";
 import { defaultTasks as defaultTaskTemplates } from "../../data/defaultTasks";
@@ -26,12 +27,20 @@ import {
   isValidDateString,
 } from "../../utils/dateUtils";
 
+// Type for our section data
+interface TaskSection {
+  title: string;
+  data: Task[];
+  monthSortKey: number; // Used for sorting sections
+}
+
 export default function ChecklistScreen() {
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newTaskText, setNewTaskText] = useState<string>("");
   const [weddingDate, setWeddingDate] = useState<string | null>(null);
   const [isDateModalVisible, setIsDateModalVisible] = useState<boolean>(false);
+  const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({});
   const router = useRouter();
 
   // --- Data Loading and Initialization ---
@@ -61,6 +70,9 @@ export default function ChecklistScreen() {
         ASYNC_STORAGE_KEYS.WEDDING_DATE
       );
       const storedTasks = await AsyncStorage.getItem(ASYNC_STORAGE_KEYS.TASKS);
+      const storedExpandedSections = await AsyncStorage.getItem(
+        ASYNC_STORAGE_KEYS.EXPANDED_SECTIONS
+      );
 
       let currentWeddingDate = isValidDateString(storedDate)
         ? storedDate
@@ -92,6 +104,11 @@ export default function ChecklistScreen() {
       }
 
       setAllTasks(tasksToProcess);
+
+      // Load expanded sections state
+      if (storedExpandedSections) {
+        setExpandedSections(JSON.parse(storedExpandedSections));
+      }
 
       // Prompt for date if not set
       if (!currentWeddingDate) {
@@ -146,6 +163,17 @@ export default function ChecklistScreen() {
     }
   };
 
+  const saveExpandedSections = async (sections: { [key: string]: boolean }) => {
+    try {
+      await AsyncStorage.setItem(
+        ASYNC_STORAGE_KEYS.EXPANDED_SECTIONS,
+        JSON.stringify(sections)
+      );
+    } catch (error) {
+      console.error("Error saving expanded sections:", error);
+    }
+  };
+
   const addTask = () => {
     if (!newTaskText.trim()) return;
     const newTaskObj: Task = {
@@ -178,27 +206,113 @@ export default function ChecklistScreen() {
     }
   };
 
-  // --- Filtering and Sorting for Display ---
-  const incompleteTasks = useMemo(() => {
-    return allTasks
-      .filter((task) => !task.completed)
-      .sort((a, b) => {
-        const dateA = a.calculatedDate
-          ? new Date(
-              calculateDateFromWedding(weddingDate, a.relativeDueDate) || 0
-            )
-          : null;
-        const dateB = b.calculatedDate
-          ? new Date(
-              calculateDateFromWedding(weddingDate, b.relativeDueDate) || 0
-            )
-          : null;
+  // --- Section Handling ---
+  const toggleSection = (sectionTitle: string) => {
+    const updatedSections = {
+      ...expandedSections,
+      [sectionTitle]: !expandedSections[sectionTitle],
+    };
+    setExpandedSections(updatedSections);
+    saveExpandedSections(updatedSections);
+  };
 
-        if (dateA && dateB) return dateA.getTime() - dateB.getTime();
-        if (dateA && !dateB) return -1;
-        if (!dateA && dateB) return 1;
-        return 0;
-      });
+  // Helper function to get date from task
+  const getTaskDate = (task: Task, weddingDateStr: string | null): Date | null => {
+    if (!weddingDateStr || !task.relativeDueDate) return null;
+  
+    try {
+      const weddingDateObj = new Date(weddingDateStr);
+  
+      // Handle object-based relativeDueDate (e.g., { value: 391, unit: 'days' })
+      if (typeof task.relativeDueDate === "object") {
+        const { value, unit } = task.relativeDueDate;
+  
+        if (unit === "days") {
+          return addDays(weddingDateObj, -value); // Subtract days from the wedding date
+        }
+  
+        // Add support for other units if needed (e.g., months, weeks)
+        // Example for months:
+        // if (unit === "months") {
+        //   return addMonths(weddingDateObj, -value);
+        // }
+      }
+  
+      // Handle string-based relativeDueDate (legacy support)
+      if (typeof task.relativeDueDate === "string") {
+        const dateStr = calculateDateFromWedding(weddingDateStr, task.relativeDueDate);
+        return dateStr ? new Date(dateStr) : null;
+      }
+  
+      return null;
+    } catch (e) {
+      console.error("Error parsing date for task:", e);
+      return null;
+    }
+  };
+
+  // --- Filtering, Grouping, and Sorting for Display ---
+  const taskSections = useMemo(() => {
+    // 1. Filter incomplete tasks
+    const filtered = allTasks.filter((task) => !task.completed);
+    
+    // 2. Group tasks by month
+    const groupedByMonth: { [key: string]: Task[] } = {};
+    const monthSortKeys: { [key: string]: number } = {};
+    
+    // Special section for tasks without dates
+    groupedByMonth["No Date"] = [];
+    monthSortKeys["No Date"] = Number.MAX_SAFE_INTEGER; // Sort to the end
+    
+    filtered.forEach(task => {
+      let dateObj = null;
+      
+      if (task.calculatedDate) {
+        // Try to use the calculated date first
+        try {
+          dateObj = parseISO(task.calculatedDate);
+          if (!isValid(dateObj)) dateObj = null;
+        } catch (e) {
+          dateObj = null;
+        }
+      } 
+      
+      // If no calculated date, try to calculate from relative date
+      if (!dateObj && weddingDate && task.relativeDueDate) {
+        dateObj = getTaskDate(task, weddingDate);
+      }
+      
+      if (dateObj && isValid(dateObj)) {
+        const monthYear = format(dateObj, "MMMM yyyy");
+        
+        // Store a numerical value for sorting (year * 100 + month)
+        if (!monthSortKeys[monthYear]) {
+          const year = dateObj.getFullYear();
+          const month = dateObj.getMonth() + 1; // 0-indexed to 1-indexed
+          monthSortKeys[monthYear] = year * 100 + month;
+        }
+        
+        if (!groupedByMonth[monthYear]) {
+          groupedByMonth[monthYear] = [];
+        }
+        groupedByMonth[monthYear].push(task);
+      } else {
+        groupedByMonth["No Date"].push(task);
+      }
+    });
+    
+    // 3. Convert to array and sort by month
+    const sections: TaskSection[] = Object.keys(groupedByMonth).map(monthYear => ({
+      title: monthYear,
+      data: groupedByMonth[monthYear],
+      monthSortKey: monthSortKeys[monthYear]
+    }));
+    
+    // Sort sections chronologically
+    sections.sort((a, b) => a.monthSortKey - b.monthSortKey);
+    
+    // Remove empty sections
+    return sections.filter(section => section.data.length > 0);
   }, [allTasks, weddingDate]);
 
   // --- Render Functions ---
@@ -269,6 +383,36 @@ export default function ChecklistScreen() {
     );
   };
 
+  const renderSectionHeader = ({ section }: { section: TaskSection }) => {
+    return (
+      <TouchableOpacity 
+        style={styles.sectionHeader}
+        onPress={() => toggleSection(section.title)}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.sectionTitle}>{section.title}</Text>
+        <View style={styles.sectionBadge}>
+          <Text style={styles.sectionCount}>{section.data.length}</Text>
+        </View>
+        <MaterialIcons 
+          name={expandedSections[section.title] ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
+          size={24} 
+          color="#666"
+        />
+      </TouchableOpacity>
+    );
+  };
+
+  // Fixed renderItem function that doesn't use conditional rendering
+  const renderSectionItem = ({ item, section }: { item: Task, section: TaskSection }) => {
+    // Only render if section is expanded
+    if (!expandedSections[section.title]) {
+      // Return an empty view with zero height instead of null
+      return <View style={{ height: 0 }} />;
+    }
+    return renderTaskItem({ item });
+  };
+
   // --- Main Return ---
 
   if (isLoading) {
@@ -318,11 +462,13 @@ export default function ChecklistScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Task List */}
-      <FlatList
-        data={incompleteTasks}
-        renderItem={renderTaskItem}
+      {/* Task List as SectionList */}
+      <SectionList
+        sections={taskSections}
+        renderItem={renderSectionItem}
+        renderSectionHeader={renderSectionHeader}
         keyExtractor={(item) => item.id}
+        stickySectionHeadersEnabled={true}
         ListHeaderComponent={<Text style={styles.listHeader}>Your Tasks</Text>}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
@@ -337,7 +483,7 @@ export default function ChecklistScreen() {
   );
 }
 
-// --- Styles ---
+// --- Extended Styles ---
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
@@ -401,11 +547,46 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginLeft: 5,
   },
+  // --- Section Styles ---
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: "#F9EAE5",  // Light theme color
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    marginVertical: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#DA6F57", // Theme color
+    flex: 1,
+  },
+  sectionBadge: {
+    backgroundColor: "#DA6F57",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  sectionCount: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
   // --- Task Card Styles ---
   taskCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    marginBottom: 12,
+    marginVertical: 6,
+    marginHorizontal: 4,
     paddingVertical: 8,
     paddingHorizontal: 5,
     shadowColor: "#000",
@@ -416,7 +597,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F5F5F5",
   },
-
   taskRow: {
     flexDirection: "row",
     alignItems: "center",

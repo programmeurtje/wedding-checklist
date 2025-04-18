@@ -68,7 +68,7 @@ export default function SettingsScreen() {
      }
 
     try {
-      setIsLoading(true); // Show loading indicator while saving
+      setIsLoading(true); 
       await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.WEDDING_DATE, weddingDate.toISOString());
       setIsLoading(false);
       Alert.alert('Success', 'Wedding date saved! Your checklist dates will update when you go back.');
