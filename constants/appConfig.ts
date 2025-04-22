@@ -9,7 +9,13 @@ export interface Task {
   id: string;
   text: string;
   completed: boolean;
-  relativeDueDate?: { value: number; unit: 'days' | 'months' | 'weeks' };
-  calculatedDate?: string;  
-  link?: string;            
+  link?: string;
+  calculatedDate?: string;
+  relativeDueDate?: RelativeDueDate | string;
+}
+
+export interface RelativeDueDate {
+  value: number;
+  unit: 'days' | 'percentage';
+  
 }

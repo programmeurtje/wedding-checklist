@@ -55,6 +55,7 @@
     },
     "updates": {
       "url": "https://u.expo.dev/e0825fa2-9b41-4ebe-a541-d148684eb733"
-    }
+    },
+    "jsEngine": "hermes"
   }
 }

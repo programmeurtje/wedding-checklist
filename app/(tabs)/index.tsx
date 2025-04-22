@@ -18,12 +18,12 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { CheckBox } from "react-native-elements";
 import WeddingDateModal from "../../components/WeddingDateModal";
 import uuid from "react-native-uuid";
-import { format, parse, parseISO, isValid, compareAsc, addDays } from "date-fns";
+import { format, parse, parseISO, isValid, compareAsc, addDays,subDays,subWeeks, subMonths,differenceInDays } from "date-fns";
 
 import { ASYNC_STORAGE_KEYS, Task } from "../../constants/appConfig";
 import { defaultTasks as defaultTaskTemplates } from "../../data/defaultTasks";
 import {
-  calculateDateFromWedding,
+
   isValidDateString,
 } from "../../utils/dateUtils";
 
@@ -45,19 +45,57 @@ export default function ChecklistScreen() {
 
   // --- Data Loading and Initialization ---
 
-  // Function to calculate dates for all tasks based on the wedding date
   const calculateAllTaskDates = useCallback(
     (tasks: Task[], currentWeddingDate: string | null): Task[] => {
       if (!isValidDateString(currentWeddingDate)) {
         return tasks.map((task) => ({ ...task, calculatedDate: undefined }));
       }
-      return tasks.map((task) => ({
-        ...task,
-        calculatedDate: calculateDateFromWedding(
-          currentWeddingDate,
-          task.relativeDueDate
-        ),
-      }));
+      
+      const today = new Date();
+      
+      return tasks.map((task) => {
+        if (!task.relativeDueDate) {
+          return { ...task, calculatedDate: undefined };
+        }
+        
+        try {
+          const weddingDate = new Date(currentWeddingDate!);
+          let calculatedDate: Date | null = null;
+          
+          if (task.relativeDueDate && typeof task.relativeDueDate === 'object' && 'unit' in task.relativeDueDate) {
+            // Handle percentage-based scheduling
+            if (task.relativeDueDate.unit === 'percentage') {
+              const totalPlanningDays = differenceInDays(weddingDate, today);
+              
+              // Ensure we have at least 1 day of planning
+              if (totalPlanningDays <= 0) {
+                calculatedDate = today;
+              } else {
+                // Calculate days from today based on percentage
+                const daysFromToday = Math.round((totalPlanningDays * task.relativeDueDate.value) / 100);
+                calculatedDate = addDays(today, daysFromToday);
+              }
+            } 
+            // Handle fixed timeframes
+            else {
+              calculatedDate = subDays(weddingDate, task.relativeDueDate.value);
+            }
+          }
+          
+          // If calculated date is in the past, use tomorrow
+          if (calculatedDate && differenceInDays(calculatedDate, today) < 0) {
+            calculatedDate = addDays(today, 1);
+          }
+          
+          return {
+            ...task,
+            calculatedDate: calculatedDate ? `By ${format(calculatedDate, 'MMM dd, yyyy')}` : undefined
+          };
+        } catch (error) {
+          console.error("Error calculating date for task:", error);
+          return { ...task, calculatedDate: undefined };
+        }
+      });
     },
     []
   );
@@ -91,11 +129,11 @@ export default function ChecklistScreen() {
         tasksToProcess = defaultTaskTemplates.map((template) => ({
           ...template,
           id: uuid.v4() as string,
-          completed: false,
-          calculatedDate: calculateDateFromWedding(
-            currentWeddingDate,
-            template.relativeDueDate
-          ),
+          completed: false
+          // calculatedDate: calculateDateFromWedding(
+          //   currentWeddingDate,
+          //   template.relativeDueDate
+          // ),
         }));
         await AsyncStorage.setItem(
           ASYNC_STORAGE_KEYS.TASKS,
@@ -221,35 +259,49 @@ export default function ChecklistScreen() {
     if (!weddingDateStr || !task.relativeDueDate) return null;
   
     try {
+      // If we already have a calculated date, use that
+      if (task.calculatedDate) {
+        const calculatedDate = new Date(task.calculatedDate);
+        if (isValid(calculatedDate)) return calculatedDate;
+      }
+  
+      // Otherwise calculate based on relativeDueDate
       const weddingDateObj = new Date(weddingDateStr);
-  
-      // Handle object-based relativeDueDate (e.g., { value: 391, unit: 'days' })
-      if (typeof task.relativeDueDate === "object") {
-        const { value, unit } = task.relativeDueDate;
-  
-        if (unit === "days") {
-          return addDays(weddingDateObj, -value); // Subtract days from the wedding date
+      const today = new Date();
+      
+      if (typeof task.relativeDueDate === 'object' && 'unit' in task.relativeDueDate) {
+        // Handle percentage-based dates
+        if (task.relativeDueDate.unit === 'percentage') {
+          const totalPlanningDays = differenceInDays(weddingDateObj, today);
+          
+          // Ensure we have at least 1 day of planning
+          if (totalPlanningDays <= 0) {
+            return today;
+          }
+          
+          // Calculate days from today based on percentage
+          const daysFromToday = Math.round((totalPlanningDays * task.relativeDueDate.value) / 100);
+          return addDays(today, daysFromToday);
+        } 
+        // Handle fixed unit dates (days/weeks/months)
+        else if (task.relativeDueDate.unit === 'days') {
+          return addDays(weddingDateObj, -task.relativeDueDate.value);
+        } 
+        else if (task.relativeDueDate.unit === 'weeks') {
+          return subWeeks(weddingDateObj, task.relativeDueDate.value);
         }
-  
-        // Add support for other units if needed (e.g., months, weeks)
-        // Example for months:
-        // if (unit === "months") {
-        //   return addMonths(weddingDateObj, -value);
-        // }
+        else if (task.relativeDueDate.unit === 'months') {
+          return subMonths(weddingDateObj, task.relativeDueDate.value);
+        }
       }
-  
-      // Handle string-based relativeDueDate (legacy support)
-      if (typeof task.relativeDueDate === "string") {
-        const dateStr = calculateDateFromWedding(weddingDateStr, task.relativeDueDate);
-        return dateStr ? new Date(dateStr) : null;
-      }
-  
+      
       return null;
     } catch (e) {
       console.error("Error parsing date for task:", e);
       return null;
     }
   };
+  
 
   // --- Filtering, Grouping, and Sorting for Display ---
   const taskSections = useMemo(() => {
@@ -324,7 +376,7 @@ export default function ChecklistScreen() {
         );
       }
     };
-
+  
     return (
       <View style={styles.taskCard}>
         {/* Row for Checkbox and Main Content */}
@@ -342,46 +394,48 @@ export default function ChecklistScreen() {
             <Text style={styles.taskTitle}>{item.text}</Text>
           </View>
         </View>
-
-        {/* Row for Details (Date & Link) - only shown if they exist */}
-        {(item.calculatedDate || item.link) ? (
+  
+        {/* Row for Date - only shown if it exists */}
+        {item.calculatedDate ? (
           <View style={styles.detailsRow}>
             <View style={styles.detailsSpacer} />
-            {/* Indent details */}
-            {item.calculatedDate ? (
-              <View style={styles.detailItem}>
-                <MaterialIcons
-                  name="calendar-today"
-                  size={14}
-                  color={styles.detailText.color}
-                  style={styles.iconStyle}
-                />
-                <Text style={styles.detailText}>{item.calculatedDate}</Text>
-              </View>
-            ):  null}
-            {item.calculatedDate && item.link ? (
-              <View style={styles.detailSeparator} />
-            ):null}{" "}
-            {/* Separator */}
-            {item.link ? (
-              <TouchableOpacity
-                onPress={handleLinkPress}
-                style={styles.detailItem}
-              >
-                <MaterialIcons
-                  name="lightbulb-outline"
-                  size={16}
-                  color={styles.linkText.color}
-                  style={styles.iconStyle}
-                />
-                <Text style={styles.linkText}>Inspire me!</Text>
-              </TouchableOpacity>
-            ): null}
+            <View style={styles.detailItem}>
+              <MaterialIcons
+                name="calendar-today"
+                size={14}
+                color={styles.detailText.color}
+                style={styles.iconStyle}
+              />
+              <Text style={styles.detailText}>{item.calculatedDate}</Text>
+            </View>
           </View>
-        ): null}
+        ) : null}
+  
+        {/* Link as a separate block */}
+        {item.link ? (
+          <TouchableOpacity
+            onPress={handleLinkPress}
+            style={styles.linkBlock}
+          >
+            <MaterialIcons
+              name="lightbulb-outline"
+              size={18}
+              color="#FFFFFF"
+              style={styles.linkIconStyle}
+            />
+            <Text style={styles.linkBlockText}>Inspire me!</Text>
+            <MaterialIcons
+              name="arrow-forward"
+              size={18}
+              color="#FFFFFF"
+              style={styles.arrowIconStyle}
+            />
+          </TouchableOpacity>
+        ) : null}
       </View>
     );
   };
+  
 
   const renderSectionHeader = ({ section }: { section: TaskSection }) => {
     return (
@@ -657,4 +711,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#888",
   },
+  linkBlock: {
+    backgroundColor: "#DA6F57",
+    borderRadius: 8,
+    marginTop: 8,
+    marginHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  linkBlockText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
+    textAlign: "center",
+  },
+  linkIconStyle: {
+    marginRight: 6,
+  },
+  arrowIconStyle: {
+    marginLeft: 6,
+  }
 });
