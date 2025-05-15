@@ -4,11 +4,11 @@ export const defaultTasks: Omit<Task, 'id' | 'completed' | 'calculatedDate'>[] =
   // Early planning tasks (using percentage)
   {
     text: "Maak je verloving bekend",
-    relativeDueDate: { value: 0, unit: 'percentage' }, // Start of planning period
+    relativeDueDate: { value: 0, unit: 'percentage' },
   },
   {
     text: "Kies een bruiloft thema",
-    relativeDueDate: { value: 5, unit: 'percentage' }, // Very early in planning
+    relativeDueDate: { value: 5, unit: 'percentage' },
     link: "https://www.girlsofhonor.com/"
   },
   {

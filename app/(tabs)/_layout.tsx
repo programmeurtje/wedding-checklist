@@ -1,5 +1,5 @@
-import { Tabs } from "expo-router";
-import { MaterialIcons } from "@expo/vector-icons";
+import { Tabs } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 
 export default function Layout() {
   return (
@@ -7,7 +7,7 @@ export default function Layout() {
       <Tabs.Screen
         name="index"
         options={{
-          tabBarLabel: "Checklist",
+          tabBarLabel: 'Checklist',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="checklist" size={size} color={color} />
           ),
@@ -16,7 +16,7 @@ export default function Layout() {
       <Tabs.Screen
         name="CompletedTaskScreen"
         options={{
-          tabBarLabel: "Completed",
+          tabBarLabel: 'Voltooide taken',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="done-all" size={size} color={color} />
           ),
@@ -25,7 +25,7 @@ export default function Layout() {
       <Tabs.Screen
         name="SettingsScreen"
         options={{
-          tabBarLabel: "Settings",
+          tabBarLabel: 'Instellingen',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="settings" size={size} color={color} />
           ),

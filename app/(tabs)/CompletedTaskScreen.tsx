@@ -1,162 +1,126 @@
-// app/(tabs)/CompletedTaskScreen.tsx
-import React, { useState, useCallback, useMemo } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Linking, Alert, ActivityIndicator, Platform } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { MaterialIcons } from "@expo/vector-icons";
-import { useRouter, useFocusEffect } from "expo-router";
-
-import { ASYNC_STORAGE_KEYS, Task } from "../../constants/appConfig"; // Adjust path
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Linking, Alert, ActivityIndicator, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { ASYNC_STORAGE_KEYS, Task } from '../../constants/appConfig';
 
 export default function CompletedTaskScreen() {
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Keep loadTasks async and wrapped in useCallback
   const loadTasks = useCallback(async () => {
-    // console.log("CompletedScreen: Loading tasks..."); // Debug log
     setIsLoading(true);
     try {
       const storedTasks = await AsyncStorage.getItem(ASYNC_STORAGE_KEYS.TASKS);
-      if (storedTasks) {
-        setAllTasks(JSON.parse(storedTasks) as Task[]);
-      } else {
-        setAllTasks([]);
-      }
+      setAllTasks(storedTasks ? JSON.parse(storedTasks) : []);
     } catch (error) {
-      console.error("CompletedScreen: Failed to load tasks", error);
-      Alert.alert("Error", "Could not load tasks.");
+      console.error('CompletedScreen: Failed to load tasks', error);
+      Alert.alert('Fout', 'Taken konden niet geladen worden.');
       setAllTasks([]);
     } finally {
-        setIsLoading(false);
-        // console.log("CompletedScreen: Loading finished."); // Debug log
+      setIsLoading(false);
     }
-  }, []); // No dependencies needed here if it only uses AsyncStorage
+  }, []);
 
-  // Correct way to use useFocusEffect with an async function
   useFocusEffect(
     useCallback(() => {
-      // This synchronous function is the 'EffectCallback'
-      // It runs when the screen gains focus.
-
-      // Call your async function inside.
       loadTasks();
-
-      // You can optionally return a cleanup function here if needed
-      // This runs when the screen loses focus.
-      // return () => {
-      //   console.log("CompletedScreen lost focus");
-      // };
-    }, [loadTasks]) // Make sure loadTasks is a dependency
+    }, [loadTasks])
   );
 
-  // Filter tasks in the component state (Memoized)
-  const completedTasks = useMemo(() => {
-      return allTasks.filter(task => task.completed);
-  }, [allTasks]);
+  const completedTasks = useMemo(() => allTasks.filter(task => task.completed), [allTasks]);
 
-  // Function to mark a task as incomplete (move it back to checklist)
   const unCompleteTask = async (taskId: string) => {
-    const updatedTasks = allTasks.map(task =>
-        task.id === taskId ? { ...task, completed: false } : task
-    );
-    setAllTasks(updatedTasks); // Update local state first
+    const updated = allTasks.map(t => t.id === taskId ? { ...t, completed: false } : t);
+    setAllTasks(updated);
     try {
-        await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TASKS, JSON.stringify(updatedTasks));
-         // console.log("Task marked incomplete:", taskId); // Debug log
+      await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TASKS, JSON.stringify(updated));
     } catch (error) {
-        console.error("Failed to uncomplete task", error);
-        Alert.alert("Error", "Could not update task status.");
-        loadTasks(); // Reload data on error to revert state
+      console.error('Failed to uncomplete task', error);
+      Alert.alert('Fout', 'Kon taakstatus niet bijwerken.');
+      loadTasks();
     }
   };
 
-   // Optional: Function to permanently delete a completed task
-   const deleteTask = (taskId: string) => {
-       Alert.alert(
-           "Delete Task",
-           "Are you sure you want to permanently delete this completed task?",
-           [
-               { text: "Cancel", style: "cancel" },
-               {
-                   text: "Delete",
-                   style: "destructive",
-                   onPress: async () => {
-                       const updatedTasks = allTasks.filter((task) => task.id !== taskId);
-                       setAllTasks(updatedTasks); // Update UI
-                       try {
-                           await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TASKS, JSON.stringify(updatedTasks));
-                           // console.log("Task deleted:", taskId); // Debug log
-                       } catch (error) {
-                           console.error("Failed to delete task", error);
-                           Alert.alert("Error", "Could not delete task.");
-                           loadTasks(); // Revert UI on error
-                       }
-                   },
-               },
-           ]
-       );
-   };
+  const deleteTask = (taskId: string) => {
+    Alert.alert(
+      'Taak verwijderen',
+      'Weet je zeker dat je deze voltooide taak permanent wilt verwijderen?',
+      [
+        { text: 'Annuleren', style: 'cancel' },
+        {
+          text: 'Verwijderen',
+          style: 'destructive',
+          onPress: async () => {
+            const filtered = allTasks.filter(t => t.id !== taskId);
+            setAllTasks(filtered);
+            try {
+              await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TASKS, JSON.stringify(filtered));
+            } catch (error) {
+              console.error('Failed to delete task', error);
+              Alert.alert('Fout', 'Kon taak niet verwijderen.');
+              loadTasks();
+            }
+          },
+        },
+      ]
+    );
+  };
 
-   // Render function remains the same...
-   const renderCompletedTaskItem = ({ item }: { item: Task }) => {
-      // ... (render logic as before)
-      const handleLinkPress = () => {
-           if (item.link) {
-               Linking.openURL(item.link).catch(err => console.error("Couldn't load page", err));
-           }
-       };
+  const renderCompletedTaskItem = ({ item }: { item: Task }) => {
+    const handleLinkPress = () => {
+      if (item.link) {
+        Linking.openURL(item.link).catch(err => console.error("Couldn't load page", err));
+      }
+    };
 
-       return (
-           <View style={styles.taskCard}>
-                <View style={styles.taskContent}>
-                    <TouchableOpacity onPress={() => unCompleteTask(item.id)} style={styles.uncompleteButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        {/* Use check-box-outline or similar if you want it to look like it can be unchecked */}
-                        <MaterialIcons name="check-box" size={24} color="#DA6F57" />
-                    </TouchableOpacity>
-                    <View style={styles.taskTextContainer}>
-                        <Text style={styles.taskText}>{item.text}</Text>
-                        {item.calculatedDate ? <Text style={styles.detailText}>{item.calculatedDate}</Text>:null}
-                        {item.link ? (
-                            <TouchableOpacity onPress={handleLinkPress} disabled={!item.link} style={styles.linkWrapper}>
-                                <Text style={[styles.linkText, !item.link && styles.disabledLink]}>Inspire me!</Text>
-                            </TouchableOpacity>
-                        ): null}
-                    </View>
-                     <TouchableOpacity onPress={() => deleteTask(item.id)} style={styles.deleteButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <MaterialIcons name="delete-outline" size={24} color="#AAA" />
-                    </TouchableOpacity>
-               </View>
-           </View>
-       );
-   };
+    return (
+      <View style={styles.taskCard}>
+        <View style={styles.taskContent}>
+          <TouchableOpacity onPress={() => unCompleteTask(item.id)} style={styles.uncompleteButton}>
+            <MaterialIcons name="check-box" size={24} color="#DA6F57" />
+          </TouchableOpacity>
+          <View style={styles.taskTextContainer}>
+            <Text style={styles.taskText}>{item.text}</Text>
+            {item.calculatedDate && <Text style={styles.detailText}>{item.calculatedDate}</Text>}
+            {item.link && (
+              <TouchableOpacity onPress={handleLinkPress} style={styles.linkWrapper}>
+                <Text style={styles.linkText}>Inspireer me!</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity onPress={() => deleteTask(item.id)} style={styles.deleteButton}>
+            <MaterialIcons name="delete-outline" size={24} color="#AAA" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
-   // Loading and main return remain the same...
-   if (isLoading) {
-     return (
-       <View style={styles.loadingContainer}>
-         <ActivityIndicator size="large" color="#DA6F57" />
-       </View>
-     );
-   }
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#DA6F57" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Completed Tasks</Text>
+      <Text style={styles.title}>Voltooide taken</Text>
       <FlatList
         data={completedTasks}
-        keyExtractor={(item) => item.id}
+        keyExtractor={item => item.id}
         renderItem={renderCompletedTaskItem}
-        ListEmptyComponent={
-            <Text style={styles.emptyText}>No tasks completed yet.</Text>
-        }
+        ListEmptyComponent={<Text style={styles.emptyText}>Nog geen taken voltooid.</Text>}
         contentContainerStyle={styles.listContentContainer}
       />
     </View>
   );
 }
 
-// Styles remain the same...
 const styles = StyleSheet.create({
     loadingContainer: {
         flex: 1,

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   SectionList,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -18,14 +19,22 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { CheckBox } from "react-native-elements";
 import WeddingDateModal from "../../components/WeddingDateModal";
 import uuid from "react-native-uuid";
-import { format, parse, parseISO, isValid, compareAsc, addDays,subDays,subWeeks, subMonths,differenceInDays } from "date-fns";
+import {
+  format,
+  parse,
+  parseISO,
+  isValid,
+  compareAsc,
+  addDays,
+  subDays,
+  subWeeks,
+  subMonths,
+  differenceInDays,
+} from "date-fns";
+import { nl } from "date-fns/locale";
 
 import { ASYNC_STORAGE_KEYS, Task } from "../../constants/appConfig";
 import { defaultTasks as defaultTaskTemplates } from "../../data/defaultTasks";
-import {
-
-  isValidDateString,
-} from "../../utils/dateUtils";
 
 // Type for our section data
 interface TaskSection {
@@ -40,8 +49,22 @@ export default function ChecklistScreen() {
   const [newTaskText, setNewTaskText] = useState<string>("");
   const [weddingDate, setWeddingDate] = useState<string | null>(null);
   const [isDateModalVisible, setIsDateModalVisible] = useState<boolean>(false);
-  const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({});
+  const [expandedSections, setExpandedSections] = useState<{
+    [key: string]: boolean;
+  }>({});
   const router = useRouter();
+
+  // New state for task date picker
+  const [isTaskDatePickerVisible, setIsTaskDatePickerVisible] =
+    useState<boolean>(false);
+  const [newTaskDate, setNewTaskDate] = useState<Date | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<number>(
+    new Date().getMonth()
+  );
+  const [selectedYear, setSelectedYear] = useState<number>(
+    new Date().getFullYear()
+  );
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   // --- Data Loading and Initialization ---
 
@@ -50,46 +73,54 @@ export default function ChecklistScreen() {
       if (!isValidDateString(currentWeddingDate)) {
         return tasks.map((task) => ({ ...task, calculatedDate: undefined }));
       }
-      
+
       const today = new Date();
-      
+
       return tasks.map((task) => {
         if (!task.relativeDueDate) {
           return { ...task, calculatedDate: undefined };
         }
-        
+
         try {
           const weddingDate = new Date(currentWeddingDate!);
           let calculatedDate: Date | null = null;
-          
-          if (task.relativeDueDate && typeof task.relativeDueDate === 'object' && 'unit' in task.relativeDueDate) {
+
+          if (
+            task.relativeDueDate &&
+            typeof task.relativeDueDate === "object" &&
+            "unit" in task.relativeDueDate
+          ) {
             // Handle percentage-based scheduling
-            if (task.relativeDueDate.unit === 'percentage') {
+            if (task.relativeDueDate.unit === "percentage") {
               const totalPlanningDays = differenceInDays(weddingDate, today);
-              
+
               // Ensure we have at least 1 day of planning
               if (totalPlanningDays <= 0) {
                 calculatedDate = today;
               } else {
                 // Calculate days from today based on percentage
-                const daysFromToday = Math.round((totalPlanningDays * task.relativeDueDate.value) / 100);
+                const daysFromToday = Math.round(
+                  (totalPlanningDays * task.relativeDueDate.value) / 100
+                );
                 calculatedDate = addDays(today, daysFromToday);
               }
-            } 
+            }
             // Handle fixed timeframes
             else {
               calculatedDate = subDays(weddingDate, task.relativeDueDate.value);
             }
           }
-          
+
           // If calculated date is in the past, use tomorrow
           if (calculatedDate && differenceInDays(calculatedDate, today) < 0) {
             calculatedDate = addDays(today, 1);
           }
-          
+
           return {
             ...task,
-            calculatedDate: calculatedDate ? `By ${format(calculatedDate, 'MMM dd, yyyy')}` : undefined
+            calculatedDate: calculatedDate
+              ? `Voor ${format(calculatedDate, "dd MMMM yyyy", { locale: nl })}`
+              : undefined,
           };
         } catch (error) {
           console.error("Error calculating date for task:", error);
@@ -129,7 +160,7 @@ export default function ChecklistScreen() {
         tasksToProcess = defaultTaskTemplates.map((template) => ({
           ...template,
           id: uuid.v4() as string,
-          completed: false
+          completed: false,
           // calculatedDate: calculateDateFromWedding(
           //   currentWeddingDate,
           //   template.relativeDueDate
@@ -154,7 +185,7 @@ export default function ChecklistScreen() {
       }
     } catch (error) {
       console.error("Error loading app data:", error);
-      Alert.alert("Error", "Could not load your checklist data.");
+      Alert.alert("Fout", "Kon je checklistgegevens niet laden.");
     } finally {
       setIsLoading(false);
     }
@@ -197,7 +228,7 @@ export default function ChecklistScreen() {
       );
     } catch (error) {
       console.error("Error saving tasks:", error);
-      Alert.alert("Error", "Could not save your task changes.");
+      Alert.alert("Fout", "Kon je taakwijzigingen niet opslaan.");
     }
   };
 
@@ -214,13 +245,27 @@ export default function ChecklistScreen() {
 
   const addTask = () => {
     if (!newTaskText.trim()) return;
+
     const newTaskObj: Task = {
       id: uuid.v4() as string,
       text: newTaskText.trim(),
       completed: false,
+      calculatedDate: newTaskDate
+        ? `Voor ${format(newTaskDate, "dd MMMM yyyy", { locale: nl })}`
+        : undefined,
     };
+
+    if (newTaskDate) {
+      newTaskObj.date = format(newTaskDate, "dd MMMM yyyy", { locale: nl });
+      newTaskObj.calculatedDate = `Voor ${format(newTaskDate, "dd MMMM yyyy", {
+        locale: nl,
+      })}`;
+    }
+
     saveTasks([newTaskObj, ...allTasks]);
     setNewTaskText("");
+    setNewTaskDate(null);
+    setSelectedDay(null);
   };
 
   const toggleTaskCompletion = (taskId: string) => {
@@ -240,8 +285,66 @@ export default function ChecklistScreen() {
       setIsDateModalVisible(false);
     } catch (error) {
       console.error("Failed to save wedding date:", error);
-      Alert.alert("Error", "Could not save the wedding date.");
+      Alert.alert("Fout", "Kon de trouwdatum niet opslaan.");
     }
+  };
+
+  // --- Date Picker for Task ---
+  const openTaskDatePicker = () => {
+    const today = new Date();
+    setSelectedMonth(today.getMonth());
+    setSelectedYear(today.getFullYear());
+    setSelectedDay(null);
+    setIsTaskDatePickerVisible(true);
+  };
+
+  const getDaysInMonth = (month: number, year: number) => {
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  function isValidDateString(dateStr: string | null | undefined): boolean {
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
+    return !isNaN(date.getTime());
+  }
+
+  const getDayArray = (month: number, year: number) => {
+    const daysInMonth = getDaysInMonth(month, year);
+    const dayArray = [];
+    for (let i = 1; i <= daysInMonth; i++) {
+      dayArray.push(i);
+    }
+    return dayArray;
+  };
+
+  const handleDaySelect = (day: number) => {
+    setSelectedDay(day);
+    const selectedDate = new Date(selectedYear, selectedMonth, day);
+    setNewTaskDate(selectedDate);
+  };
+
+  const handlePrevMonth = () => {
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
+      setSelectedYear(selectedYear - 1);
+    } else {
+      setSelectedMonth(selectedMonth - 1);
+    }
+    setSelectedDay(null);
+  };
+
+  const handleNextMonth = () => {
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
+      setSelectedYear(selectedYear + 1);
+    } else {
+      setSelectedMonth(selectedMonth + 1);
+    }
+    setSelectedDay(null);
+  };
+
+  const confirmTaskDate = () => {
+    setIsTaskDatePickerVisible(false);
   };
 
   // --- Section Handling ---
@@ -255,116 +358,141 @@ export default function ChecklistScreen() {
   };
 
   // Helper function to get date from task
-  const getTaskDate = (task: Task, weddingDateStr: string | null): Date | null => {
+  const getTaskDate = (
+    task: Task,
+    weddingDateStr: string | null
+  ): Date | null => {
     if (!weddingDateStr || !task.relativeDueDate) return null;
-  
+
     try {
       // If we already have a calculated date, use that
       if (task.calculatedDate) {
         const calculatedDate = new Date(task.calculatedDate);
         if (isValid(calculatedDate)) return calculatedDate;
       }
-  
+
       // Otherwise calculate based on relativeDueDate
       const weddingDateObj = new Date(weddingDateStr);
       const today = new Date();
-      
-      if (typeof task.relativeDueDate === 'object' && 'unit' in task.relativeDueDate) {
+
+      if (
+        typeof task.relativeDueDate === "object" &&
+        "unit" in task.relativeDueDate
+      ) {
         // Handle percentage-based dates
-        if (task.relativeDueDate.unit === 'percentage') {
+        if (task.relativeDueDate.unit === "percentage") {
           const totalPlanningDays = differenceInDays(weddingDateObj, today);
-          
+
           // Ensure we have at least 1 day of planning
           if (totalPlanningDays <= 0) {
             return today;
           }
-          
+
           // Calculate days from today based on percentage
-          const daysFromToday = Math.round((totalPlanningDays * task.relativeDueDate.value) / 100);
+          const daysFromToday = Math.round(
+            (totalPlanningDays * task.relativeDueDate.value) / 100
+          );
           return addDays(today, daysFromToday);
-        } 
-        // Handle fixed unit dates (days/weeks/months)
-        else if (task.relativeDueDate.unit === 'days') {
-          return addDays(weddingDateObj, -task.relativeDueDate.value);
-        } 
-        else if (task.relativeDueDate.unit === 'weeks') {
-          return subWeeks(weddingDateObj, task.relativeDueDate.value);
         }
-        else if (task.relativeDueDate.unit === 'months') {
+        // Handle fixed unit dates (days/weeks/months)
+        else if (task.relativeDueDate.unit === "days") {
+          return addDays(weddingDateObj, -task.relativeDueDate.value);
+        } else if (task.relativeDueDate.unit === "weeks") {
+          return subWeeks(weddingDateObj, task.relativeDueDate.value);
+        } else if (task.relativeDueDate.unit === "months") {
           return subMonths(weddingDateObj, task.relativeDueDate.value);
         }
       }
-      
+
       return null;
     } catch (e) {
       console.error("Error parsing date for task:", e);
       return null;
     }
   };
-  
 
   // --- Filtering, Grouping, and Sorting for Display ---
   const taskSections = useMemo(() => {
     // 1. Filter incomplete tasks
     const filtered = allTasks.filter((task) => !task.completed);
-    
+
     // 2. Group tasks by month
     const groupedByMonth: { [key: string]: Task[] } = {};
     const monthSortKeys: { [key: string]: number } = {};
-    
+
     // Special section for tasks without dates
-    groupedByMonth["No Date"] = [];
-    monthSortKeys["No Date"] = Number.MAX_SAFE_INTEGER; // Sort to the end
-    
-    filtered.forEach(task => {
+    groupedByMonth["Geen Datum"] = [];
+    monthSortKeys["Geen Datum"] = Number.MAX_SAFE_INTEGER; // Sort to the end
+
+    filtered.forEach((task) => {
       let dateObj = null;
-      
-      if (task.calculatedDate) {
-        // Try to use the calculated date first
+
+      // First check if the task has the new date property
+      if (task.date) {
         try {
-          dateObj = parseISO(task.calculatedDate);
+          dateObj = parseISO(task.date);
           if (!isValid(dateObj)) dateObj = null;
         } catch (e) {
           dateObj = null;
         }
-      } 
-      
-      // If no calculated date, try to calculate from relative date
+      }
+      // Then try the calculatedDate (for backward compatibility)
+      else if (task.calculatedDate) {
+        try {
+          // match “Voor 15 mei 2025”
+          const dateMatch = task.calculatedDate.match(
+            /Voor\s+(\d{1,2}\s+[A-Za-zéû]+\s+\d{4})/
+          );
+          if (dateMatch && dateMatch[1]) {
+            // parse with Dutch locale and no comma
+            dateObj = parse(dateMatch[1], "dd MMMM yyyy", new Date(), {
+              locale: nl,
+            });
+          }
+          if (!isValid(dateObj)) dateObj = null;
+        } catch {
+          dateObj = null;
+        }
+      }
+
+      // If no direct date property, try to calculate from relative date
       if (!dateObj && weddingDate && task.relativeDueDate) {
         dateObj = getTaskDate(task, weddingDate);
       }
-      
+
       if (dateObj && isValid(dateObj)) {
-        const monthYear = format(dateObj, "MMMM yyyy");
-        
+        const monthYear = format(dateObj, "MMMM yyyy", { locale: nl });
+
         // Store a numerical value for sorting (year * 100 + month)
         if (!monthSortKeys[monthYear]) {
           const year = dateObj.getFullYear();
           const month = dateObj.getMonth() + 1; // 0-indexed to 1-indexed
           monthSortKeys[monthYear] = year * 100 + month;
         }
-        
+
         if (!groupedByMonth[monthYear]) {
           groupedByMonth[monthYear] = [];
         }
         groupedByMonth[monthYear].push(task);
       } else {
-        groupedByMonth["No Date"].push(task);
+        groupedByMonth["Geen Datum"].push(task);
       }
     });
-    
+
     // 3. Convert to array and sort by month
-    const sections: TaskSection[] = Object.keys(groupedByMonth).map(monthYear => ({
-      title: monthYear,
-      data: groupedByMonth[monthYear],
-      monthSortKey: monthSortKeys[monthYear]
-    }));
-    
+    const sections: TaskSection[] = Object.keys(groupedByMonth).map(
+      (monthYear) => ({
+        title: monthYear,
+        data: groupedByMonth[monthYear],
+        monthSortKey: monthSortKeys[monthYear],
+      })
+    );
+
     // Sort sections chronologically
     sections.sort((a, b) => a.monthSortKey - b.monthSortKey);
-    
+
     // Remove empty sections
-    return sections.filter(section => section.data.length > 0);
+    return sections.filter((section) => section.data.length > 0);
   }, [allTasks, weddingDate]);
 
   // --- Render Functions ---
@@ -376,7 +504,7 @@ export default function ChecklistScreen() {
         );
       }
     };
-  
+
     return (
       <View style={styles.taskCard}>
         {/* Row for Checkbox and Main Content */}
@@ -394,7 +522,7 @@ export default function ChecklistScreen() {
             <Text style={styles.taskTitle}>{item.text}</Text>
           </View>
         </View>
-  
+
         {/* Row for Date - only shown if it exists */}
         {item.calculatedDate ? (
           <View style={styles.detailsRow}>
@@ -410,20 +538,17 @@ export default function ChecklistScreen() {
             </View>
           </View>
         ) : null}
-  
+
         {/* Link as a separate block */}
         {item.link ? (
-          <TouchableOpacity
-            onPress={handleLinkPress}
-            style={styles.linkBlock}
-          >
+          <TouchableOpacity onPress={handleLinkPress} style={styles.linkBlock}>
             <MaterialIcons
               name="lightbulb-outline"
               size={18}
               color="#FFFFFF"
               style={styles.linkIconStyle}
             />
-            <Text style={styles.linkBlockText}>Inspire me!</Text>
+            <Text style={styles.linkBlockText}>Inspireer me!</Text>
             <MaterialIcons
               name="arrow-forward"
               size={18}
@@ -435,11 +560,10 @@ export default function ChecklistScreen() {
       </View>
     );
   };
-  
 
   const renderSectionHeader = ({ section }: { section: TaskSection }) => {
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.sectionHeader}
         onPress={() => toggleSection(section.title)}
         activeOpacity={0.7}
@@ -448,9 +572,13 @@ export default function ChecklistScreen() {
         <View style={styles.sectionBadge}>
           <Text style={styles.sectionCount}>{section.data.length}</Text>
         </View>
-        <MaterialIcons 
-          name={expandedSections[section.title] ? "keyboard-arrow-up" : "keyboard-arrow-down"} 
-          size={24} 
+        <MaterialIcons
+          name={
+            expandedSections[section.title]
+              ? "keyboard-arrow-up"
+              : "keyboard-arrow-down"
+          }
+          size={24}
           color="#666"
         />
       </TouchableOpacity>
@@ -458,7 +586,13 @@ export default function ChecklistScreen() {
   };
 
   // Fixed renderItem function that doesn't use conditional rendering
-  const renderSectionItem = ({ item, section }: { item: Task, section: TaskSection }) => {
+  const renderSectionItem = ({
+    item,
+    section,
+  }: {
+    item: Task;
+    section: TaskSection;
+  }) => {
     // Only render if section is expanded
     if (!expandedSections[section.title]) {
       // Return an empty view with zero height instead of null
@@ -473,7 +607,7 @@ export default function ChecklistScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#DA6F57" />
-        <Text style={styles.loadingText}>Loading your checklist...</Text>
+        <Text style={styles.loadingText}>Je checklist laden...</Text>
       </View>
     );
   }
@@ -487,34 +621,181 @@ export default function ChecklistScreen() {
             setIsDateModalVisible(false);
           } else {
             Alert.alert(
-              "Wedding Date Required",
-              "Please set your wedding date to continue."
+              "Trouwdatum Vereist",
+              "Stel je trouwdatum in om door te gaan."
             );
           }
         }}
         onSaveDate={handleSaveWeddingDate}
       />
 
+      {/* Task Date Picker Modal */}
+      <Modal
+        visible={isTaskDatePickerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsTaskDatePickerVisible(false)}
+      >
+        <View style={styles.datePickerModalOverlay}>
+          <View style={styles.datePickerModalContent}>
+            <View style={styles.datePickerHeader}>
+              <Text style={styles.datePickerTitle}>Selecteer Deadline</Text>
+              <TouchableOpacity
+                onPress={() => setIsTaskDatePickerVisible(false)}
+                style={styles.datePickerCloseButton}
+              >
+                <MaterialIcons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.monthSelector}>
+              <TouchableOpacity
+                onPress={handlePrevMonth}
+                style={styles.monthNavButton}
+              >
+                <MaterialIcons name="chevron-left" size={24} color="#DA6F57" />
+              </TouchableOpacity>
+              <Text style={styles.monthYearText}>
+                {format(new Date(selectedYear, selectedMonth, 1), "MMMM yyyy",{locale: nl})}
+              </Text>
+              <TouchableOpacity
+                onPress={handleNextMonth}
+                style={styles.monthNavButton}
+              >
+                <MaterialIcons name="chevron-right" size={24} color="#DA6F57" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekdayHeader}>
+              {["Zo", "Ma", "Di", "Wo", "Do", "Vr", "Za"].map((day, index) => (
+                <Text key={index} style={styles.weekdayText}>
+                  {day}
+                </Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {(() => {
+                const days = getDayArray(selectedMonth, selectedYear);
+                const firstDayOfMonth = new Date(
+                  selectedYear,
+                  selectedMonth,
+                  1
+                ).getDay();
+                const calendarCells = [];
+
+                // Add empty cells for days before the 1st of the month
+                for (let i = 0; i < firstDayOfMonth; i++) {
+                  calendarCells.push(
+                    <View key={`empty-${i}`} style={styles.calendarCell} />
+                  );
+                }
+
+                // Add cells for each day of the month
+                days.forEach((day) => {
+                  const isSelected = day === selectedDay;
+                  calendarCells.push(
+                    <TouchableOpacity
+                      key={`day-${day}`}
+                      style={[
+                        styles.calendarCell,
+                        isSelected && styles.selectedCalendarCell,
+                      ]}
+                      onPress={() => handleDaySelect(day)}
+                    >
+                      <Text
+                        style={[
+                          styles.calendarCellText,
+                          isSelected && styles.selectedCalendarCellText,
+                        ]}
+                      >
+                        {day}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                });
+
+                return calendarCells;
+              })()}
+            </View>
+
+            <View style={styles.datePickerFooter}>
+              <TouchableOpacity
+                style={[
+                  styles.datePickerConfirmButton,
+                  !selectedDay && styles.datePickerDisabledButton,
+                ]}
+                onPress={confirmTaskDate}
+                disabled={!selectedDay}
+              >
+                <Text style={styles.datePickerConfirmText}>
+                  {selectedDay
+                    ? `Deadline instellen: ${format(
+                        new Date(selectedYear, selectedMonth, selectedDay),
+                        "dd MMMM yyyy", { locale: nl }
+                      )}`
+                    : "Selecteer een datum"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Text style={styles.title}>
         {weddingDate
-          ? `Wedding: ${format(new Date(weddingDate), "MMMM dd, yyyy")}`
-          : "Wedding Checklist"}
+          ? `Bruiloft: ${format(new Date(weddingDate), "dd MMMM yyyy", { locale: nl })}`
+          : "Bruiloft Checklist"}
       </Text>
 
       {/* Task Input */}
       <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Add a custom task..."
-          value={newTaskText}
-          onChangeText={setNewTaskText}
-          onSubmitEditing={addTask}
-          returnKeyType="done"
-        />
-        <TouchableOpacity style={styles.addButton} onPress={addTask}>
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={styles.input}
+            placeholder="Voeg een taak toe..."
+            value={newTaskText}
+            onChangeText={setNewTaskText}
+            onSubmitEditing={newTaskText.trim() ? addTask : undefined}
+            returnKeyType="done"
+          />
+          <TouchableOpacity
+            style={styles.calendarButton}
+            onPress={openTaskDatePicker}
+          >
+            <MaterialIcons
+              name="event"
+              size={22}
+              color={newTaskDate ? "#DA6F57" : "#BDBDBD"}
+            />
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={addTask}
+          disabled={!newTaskText.trim()}
+        >
           <Text style={styles.addButtonText}>+</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Display selected date if any */}
+      {newTaskDate && (
+        <View style={styles.selectedDateDisplay}>
+          <MaterialIcons
+            name="calendar-today"
+            size={14}
+            color="#DA6F57"
+            style={styles.iconStyle}
+          />
+          <Text style={styles.selectedDateText}>
+            Deadline: {format(newTaskDate, "dd MMMM yyyy", { locale: nl })}
+          </Text>
+          <TouchableOpacity onPress={() => setNewTaskDate(null)}>
+            <MaterialIcons name="close" size={16} color="#666" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Task List as SectionList */}
       <SectionList
@@ -523,12 +804,12 @@ export default function ChecklistScreen() {
         renderSectionHeader={renderSectionHeader}
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={true}
-        ListHeaderComponent={<Text style={styles.listHeader}>Your Tasks</Text>}
+        ListHeaderComponent={<Text style={styles.listHeader}>To do's</Text>}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
             {allTasks.length > 0
-              ? "Woohoo! All tasks completed!"
-              : "No tasks yet. Add one!"}
+              ? "Hoera! Alle taken voltooid!"
+              : "Nog geen taken. Voeg er een toe!"}
           </Text>
         }
         contentContainerStyle={styles.listContentContainer}
@@ -565,17 +846,26 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: "row",
-    marginBottom: 20,
+    marginBottom: 5,
+  },
+  inputWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
   },
   input: {
     flex: 1,
     paddingVertical: 10,
     paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
     fontSize: 16,
+  },
+  calendarButton: {
+    padding: 10,
+    marginRight: 5,
   },
   addButton: {
     marginLeft: 10,
@@ -591,6 +881,21 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     lineHeight: 26,
   },
+  selectedDateDisplay: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9EAE5",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    marginBottom: 15,
+    alignSelf: "flex-start",
+  },
+  selectedDateText: {
+    fontSize: 14,
+    color: "#DA6F57",
+    marginHorizontal: 5,
+  },
   listContentContainer: {
     paddingBottom: 20,
   },
@@ -601,12 +906,118 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginLeft: 5,
   },
+  // --- Date Picker Modal Styles ---
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  datePickerModalContent: {
+    width: "85%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 15,
+    padding: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+  },
+  datePickerCloseButton: {
+    padding: 5,
+  },
+  monthSelector: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  monthNavButton: {
+    padding: 8,
+  },
+  monthYearText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#DA6F57",
+  },
+  weekdayHeader: {
+    flexDirection: "row",
+    marginBottom: 10,
+  },
+  weekdayText: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 14,
+    color: "#666",
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 15,
+  },
+  calendarCell: {
+    width: "14.28%", // 7 days per week (100% / 7)
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 5,
+  },
+  calendarCellText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  selectedCalendarCell: {
+    backgroundColor: "#DA6F57",
+    borderRadius: 20,
+  },
+  selectedCalendarCellText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  datePickerFooter: {
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+    paddingTop: 15,
+    alignItems: "center",
+  },
+  datePickerConfirmButton: {
+    backgroundColor: "#DA6F57",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  datePickerConfirmText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  datePickerDisabledButton: {
+    backgroundColor: "#BDBDBD",
+  },
   // --- Section Styles ---
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: "#F9EAE5",  // Light theme color
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F9EAE5", // Light theme color
     paddingVertical: 10,
     paddingHorizontal: 15,
     borderRadius: 8,
@@ -734,5 +1145,5 @@ const styles = StyleSheet.create({
   },
   arrowIconStyle: {
     marginLeft: 6,
-  }
+  },
 });

@@ -12,6 +12,7 @@ export interface Task {
   link?: string;
   calculatedDate?: string;
   relativeDueDate?: RelativeDueDate | string;
+  date?: string;
 }
 
 export interface RelativeDueDate {
