@@ -63,6 +63,10 @@ export default function SettingsScreen() {
     }
   };
 
+  const toggleDatePicker = () => {
+    setShowPicker(!showPicker);
+  };
+
   const saveWeddingDate = async () => {
     if (!weddingDate) {
       Alert.alert("Geen datum geselecteerd", "Selecteer eerst een trouwdatum.");
@@ -138,42 +142,63 @@ export default function SettingsScreen() {
     <View style={styles.container}>
       <Text style={styles.title}>Instellingen</Text>
 
-      <Text style={styles.label}>Jouw trouwdatum:</Text>
+      <View style={styles.dateSection}>
+        <Text style={styles.label}>Jullie trouwdatum:</Text>
+
+        <TouchableOpacity
+          onPress={toggleDatePicker}
+          style={styles.datePickerButton}
+          activeOpacity={0.8}
+        >
+          <View style={styles.dateInputContainer}>
+            <MaterialIcons
+              name="calendar-today"
+              size={20}
+              color="#DA6F57"
+              style={styles.calendarIcon}
+            />
+            <Text style={styles.dateText}>
+              {weddingDate
+                ? format(weddingDate, "dd MMMM yyyy", { locale: nl })
+                : "Selecteer datum"}
+            </Text>
+            <MaterialIcons
+              name="arrow-drop-down"
+              size={24}
+              color="#777"
+              style={styles.dropdownIcon}
+            />
+          </View>
+        </TouchableOpacity>
+
+        {showPicker && (
+          <View style={styles.pickerContainer}>
+            <DateTimePicker
+              testID="dateTimePicker"
+              value={weddingDate || new Date()}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={onDateChange}
+              minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
+              style={styles.datePicker}
+            />
+            {Platform.OS === "ios" && (
+              <TouchableOpacity 
+                style={styles.doneButton}
+                onPress={() => setShowPicker(false)}
+              >
+                <Text style={styles.doneButtonText}>Gereed</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
 
       <TouchableOpacity
-        onPress={() => setShowPicker(true)}
-        style={styles.dateDisplayButton}
-      >
-        <MaterialIcons
-          name="calendar-today"
-          size={20}
-          color="#DA6F57"
-          style={{ marginRight: 10 }}
-        />
-        <Text style={styles.dateDisplayText}>
-          {weddingDate
-            ? format(weddingDate, "dd MMMM yyyy", { locale: nl })
-            : "Selecteer datum"}
-        </Text>
-      </TouchableOpacity>
-
-      {showPicker && (
-        <DateTimePicker
-          testID="dateTimePicker"
-          value={weddingDate || new Date()}
-          mode="date"
-          display="default"
-          onChange={onDateChange}
-          minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
-        />
-      )}
-
-      <View
-        style={{ marginTop: showPicker && Platform.OS === "ios" ? 10 : 20 }}
-      />
-
-      <TouchableOpacity
-        style={[styles.actionButton, !weddingDate && styles.disabledButton]}
+        style={[
+          styles.actionButton, 
+          !weddingDate && styles.disabledButton,
+        ]}
         onPress={saveWeddingDate}
         disabled={!weddingDate || isLoading}
       >
@@ -186,7 +211,6 @@ export default function SettingsScreen() {
 
       <View style={styles.divider} />
 
-      <Text style={styles.label}>App-gegevens:</Text>
       <TouchableOpacity
         style={[styles.actionButton, styles.clearButton]}
         onPress={confirmClearData}
@@ -195,7 +219,7 @@ export default function SettingsScreen() {
         <Text style={styles.actionButtonText}>Gegevens resetten</Text>
       </TouchableOpacity>
       <Text style={styles.warningText}>
-        Dit verwijdert alle taken en de trouwdatum.
+        Reset alle taken en de trouwdatum.
       </Text>
     </View>
   );
@@ -227,27 +251,68 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#333",
   },
+  dateSection: {
+    marginBottom: 25,
+  },
   label: {
     fontSize: 16,
     color: "#555",
-    marginBottom: 8,
+    marginBottom: 12,
     fontWeight: "500",
   },
-  dateDisplayButton: {
-    // The touchable area to trigger the picker
+  datePickerButton: {
+    width: "100%",
+  },
+  dateInputContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E0E0E0",
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 15,
-    marginBottom: 10, // Space before picker appears or save button
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  dateDisplayText: {
+  calendarIcon: {
+    marginRight: 10,
+  },
+  dateText: {
     fontSize: 16,
-    color: "#333", // Display selected date in normal text color
+    color: "#333",
+    flex: 1,
+  },
+  dropdownIcon: {
+    marginLeft: 5,
+  },
+  pickerContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    marginTop: 10,
+    ...(Platform.OS === "ios" ? {
+      borderWidth: 1,
+      borderColor: "#E0E0E0",
+      paddingVertical: 10,
+    } : {}),
+  },
+  datePicker: {
+    ...(Platform.OS === "ios" ? {
+      width: "100%",
+    } : {}),
+  },
+  doneButton: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  doneButtonText: {
+    color: "#DA6F57",
+    fontSize: 16,
+    fontWeight: "500",
   },
   actionButton: {
     backgroundColor: "#DA6F57",
@@ -255,12 +320,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     marginBottom: 20,
-    // marginTop handled dynamically above
-    height: 50, // Fixed height for button consistency
-    justifyContent: "center", // Center activity indicator/text
+    height: 50,
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   disabledButton: {
     backgroundColor: "#E0A093", // Faded theme color
+    shadowOpacity: 0,
+    elevation: 0,
   },
   actionButtonText: {
     color: "#FFF",
