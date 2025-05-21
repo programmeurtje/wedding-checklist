@@ -9,9 +9,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
+import { DatePickerModal } from "react-native-paper-dates";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useRouter } from "expo-router";
@@ -20,7 +18,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 
 export default function SettingsScreen() {
   const [weddingDate, setWeddingDate] = useState<Date | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
@@ -47,24 +45,31 @@ export default function SettingsScreen() {
     loadWeddingDate();
   }, [loadWeddingDate]);
 
-  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === "android") {
-      setShowPicker(false);
+  const onDismiss = () => {
+    setDatePickerVisible(false);
+  };
+
+  const onConfirm = ({ date }: { date: Date | undefined }) => {
+    setDatePickerVisible(false);
+    if (!date) {
+      Alert.alert(
+        "Ongeldige datum",
+        "Selecteer vandaag of een toekomstige datum."
+      );
+      return;
     }
-    if (event.type === "set" && selectedDate) {
-      if (selectedDate < new Date(new Date().setHours(0, 0, 0, 0))) {
-        Alert.alert(
-          "Ongeldige datum",
-          "Selecteer vandaag of een toekomstige datum."
-        );
-        return;
-      }
-      setWeddingDate(selectedDate);
+    if (date < new Date(new Date().setHours(0, 0, 0, 0))) {
+      Alert.alert(
+        "Ongeldige datum",
+        "Selecteer vandaag of een toekomstige datum."
+      );
+      return;
     }
+    setWeddingDate(date);
   };
 
   const toggleDatePicker = () => {
-    setShowPicker(!showPicker);
+    setDatePickerVisible(true);
   };
 
   const saveWeddingDate = async () => {
@@ -130,7 +135,7 @@ export default function SettingsScreen() {
     }
   };
 
-  if (isLoading && !showPicker) {
+  if (isLoading && !datePickerVisible) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#DA6F57" />
@@ -171,27 +176,19 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
 
-        {showPicker && (
-          <View style={styles.pickerContainer}>
-            <DateTimePicker
-              testID="dateTimePicker"
-              value={weddingDate || new Date()}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onDateChange}
-              minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
-              style={styles.datePicker}
-            />
-            {Platform.OS === "ios" && (
-              <TouchableOpacity 
-                style={styles.doneButton}
-                onPress={() => setShowPicker(false)}
-              >
-                <Text style={styles.doneButtonText}>Gereed</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+        <DatePickerModal
+          locale="nl"
+          mode="single"
+          visible={datePickerVisible}
+          onDismiss={onDismiss}
+          date={weddingDate || new Date()}
+          onConfirm={onConfirm}
+          saveLabel="Bevestigen"
+          label="Selecteer een datum"
+          validRange={{
+            startDate: new Date(new Date().setHours(0, 0, 0, 0)),
+          }}
+        />
       </View>
 
       <TouchableOpacity
@@ -202,7 +199,7 @@ export default function SettingsScreen() {
         onPress={saveWeddingDate}
         disabled={!weddingDate || isLoading}
       >
-        {isLoading && !showPicker ? (
+        {isLoading && !datePickerVisible ? (
           <ActivityIndicator color="#FFF" />
         ) : (
           <Text style={styles.actionButtonText}>Trouwdatum opslaan</Text>
@@ -288,31 +285,6 @@ const styles = StyleSheet.create({
   },
   dropdownIcon: {
     marginLeft: 5,
-  },
-  pickerContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    marginTop: 10,
-    ...(Platform.OS === "ios" ? {
-      borderWidth: 1,
-      borderColor: "#E0E0E0",
-      paddingVertical: 10,
-    } : {}),
-  },
-  datePicker: {
-    ...(Platform.OS === "ios" ? {
-      width: "100%",
-    } : {}),
-  },
-  doneButton: {
-    alignSelf: "flex-end",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
-  doneButtonText: {
-    color: "#DA6F57",
-    fontSize: 16,
-    fontWeight: "500",
   },
   actionButton: {
     backgroundColor: "#DA6F57",

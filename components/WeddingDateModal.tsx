@@ -8,9 +8,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
+import { DatePickerModal } from "react-native-paper-dates";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -27,22 +25,23 @@ export default function WeddingDateModal({
   onSaveDate,
 }: WeddingDateModalProps) {
   const [date, setDate] = useState(() => new Date());
-  const [showPicker, setShowPicker] = useState(Platform.OS === "ios");
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
 
-  const onChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === "android") {
-      setShowPicker(false);
+  const onDismiss = () => {
+    setDatePickerVisible(false);
+  };
+
+  const onConfirm = ({ date }: { date: Date | undefined }) => {
+    if (!date) return;
+    if (date < new Date(new Date().setHours(0, 0, 0, 0))) {
+      Alert.alert(
+        "Ongeldige datum",
+        "Selecteer vandaag of een toekomstige datum voor je bruiloft."
+      );
+      return;
     }
-    if (event.type === "set" && selectedDate) {
-      if (selectedDate < new Date(new Date().setHours(0, 0, 0, 0))) {
-        Alert.alert(
-          "Ongeldige datum",
-          "Selecteer vandaag of een toekomstige datum voor je bruiloft."
-        );
-        return;
-      }
-      setDate(selectedDate);
-    }
+    setDate(date);
+    setDatePickerVisible(false);
   };
 
   const handleSave = () => {
@@ -57,7 +56,7 @@ export default function WeddingDateModal({
   };
 
   const triggerPicker = () => {
-    setShowPicker(true);
+    setDatePickerVisible(true);
   };
 
   return (
@@ -74,36 +73,31 @@ export default function WeddingDateModal({
             Dit helpt ons om je checklist-tijdlijn af te stemmen!
           </Text>
 
-          {Platform.OS === "ios" ? (
-            <View style={styles.dateDisplay}>
-              <MaterialIcons name="calendar-today" size={20} color="#555" />
-              <Text style={styles.dateDisplayText}>
-                {format(date, "dd MMMM yyyy", { locale: nl })}
-              </Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              onPress={triggerPicker}
-              style={styles.androidPickerButton}
-            >
-              <MaterialIcons name="calendar-today" size={20} color="#DA6F57" />
-              <Text style={styles.androidPickerButtonText}>
-                {format(date, "dd MMMM yyyy", { locale: nl })}
-              </Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            onPress={triggerPicker}
+            style={styles.datePickerButton}
+          >
+            <MaterialIcons name="calendar-today" size={20} color="#DA6F57" />
+            <Text style={styles.datePickerButtonText}>
+              {format(date, "dd MMMM yyyy", { locale: nl })}
+            </Text>
+          </TouchableOpacity>
 
-          {showPicker && (
-            <DateTimePicker
-              testID="dateTimePicker"
-              value={date}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={onChange}
-              minimumDate={new Date(new Date().setHours(0, 0, 0, 0))}
-              style={styles.datePicker}
-            />
-          )}
+          <DatePickerModal
+            locale="nl"
+            mode="single"
+            visible={datePickerVisible}
+            onDismiss={onDismiss}
+            date={date}
+            onConfirm={onConfirm}
+            saveLabel="Bevestigen"
+            label="Selecteer een datum"
+            animationType="slide"
+            presentationStyle="pageSheet"
+            validRange={{
+              startDate: new Date(new Date().setHours(0, 0, 0, 0)),
+            }}
+          />
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity
@@ -151,19 +145,7 @@ const styles = StyleSheet.create({
     color: "#555",
     fontSize: 14,
   },
-  // --- Input Display/Trigger Styles ---
-  dateDisplay: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 10,
-    marginBottom: 10,
-  },
-  dateDisplayText: {
-    marginLeft: 10,
-    fontSize: 16,
-    color: "#333",
-  },
-  androidPickerButton: {
+  datePickerButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -176,19 +158,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     width: "80%",
   },
-  androidPickerButtonText: {
+  datePickerButtonText: {
     marginLeft: 10,
     color: "#DA6F57",
     fontSize: 16,
     fontWeight: "500",
   },
-  // --- Picker Style ---
-  datePicker: {
-    width: Platform.OS === "ios" ? "100%" : undefined,
-    height: Platform.OS === "ios" ? 150 : undefined,
-    marginBottom: Platform.OS === "ios" ? 15 : 0,
-  },
-  // --- Button Styles ---
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "center",
