@@ -9,6 +9,10 @@ import {
   Alert,
 } from "react-native";
 import { DatePickerModal } from "react-native-paper-dates";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -24,7 +28,11 @@ export default function WeddingDateModal({
   onClose,
   onSaveDate,
 }: WeddingDateModalProps) {
-  const [date, setDate] = useState(() => new Date());
+  const [date, setDate] = useState(() => {
+    const today = new Date();
+    today.setFullYear(today.getFullYear() + 1);
+    return today;
+  });
   const [datePickerVisible, setDatePickerVisible] = useState(false);
 
   const onDismiss = () => {
@@ -70,7 +78,7 @@ export default function WeddingDateModal({
         <View style={styles.modalView}>
           <Text style={styles.modalTitle}>Stel je trouwdatum in</Text>
           <Text style={styles.modalText}>
-            Dit helpt ons om je checklist-tijdlijn af te stemmen!
+            Dit helpt ons om je checklist deadlines af te stemmen!
           </Text>
 
           <TouchableOpacity
@@ -83,20 +91,32 @@ export default function WeddingDateModal({
             </Text>
           </TouchableOpacity>
 
-          <DatePickerModal
-            locale="nl"
-            mode="single"
-            visible={datePickerVisible}
-            onDismiss={onDismiss}
-            date={date}
-            onConfirm={onConfirm}
-            saveLabel="Bevestigen"
-            label="Selecteer een datum"
-            animationType="slide"
-            presentationStyle="pageSheet"
-            validRange={{
-              startDate: new Date(new Date().setHours(0, 0, 0, 0)),
+          <DateTimePickerModal
+            isVisible={datePickerVisible}
+            mode="date"
+            onConfirm={(date) => {
+              // The DateTimePickerModal returns a Date object directly
+              if (!date) {
+                Alert.alert(
+                  "Ongeldige datum",
+                  "Selecteer vandaag of een toekomstige datum."
+                );
+                return;
+              }
+              if (date < new Date(new Date().setHours(0, 0, 0, 0))) {
+                Alert.alert(
+                  "Ongeldige datum",
+                  "Selecteer vandaag of een toekomstige datum."
+                );
+                return;
+              }
+              setDate(date);
+              setDatePickerVisible(false);
             }}
+            onCancel={() => setDatePickerVisible(false)}
+            minimumDate={new Date()}
+            confirmTextIOS="Bevestigen"
+            cancelTextIOS="Annuleren"
           />
 
           <View style={styles.buttonContainer}>

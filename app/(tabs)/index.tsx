@@ -18,6 +18,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { CheckBox } from "react-native-elements";
 import WeddingDateModal from "../../components/WeddingDateModal";
+import ShortPlanningModal from "../../components/ShortPlanningModal";
 import uuid from "react-native-uuid";
 import {
   format,
@@ -30,6 +31,7 @@ import {
   subWeeks,
   subMonths,
   differenceInDays,
+  differenceInMonths,
 } from "date-fns";
 import { nl } from "date-fns/locale";
 
@@ -49,6 +51,8 @@ export default function ChecklistScreen() {
   const [newTaskText, setNewTaskText] = useState<string>("");
   const [weddingDate, setWeddingDate] = useState<string | null>(null);
   const [isDateModalVisible, setIsDateModalVisible] = useState<boolean>(false);
+  const [isShortPlanningModalVisible, setIsShortPlanningModalVisible] =
+    useState<boolean>(false);
   const [expandedSections, setExpandedSections] = useState<{
     [key: string]: boolean;
   }>({});
@@ -199,22 +203,44 @@ export default function ChecklistScreen() {
   // Refresh data when the screen comes into focus (e.g., after changing date in settings)
   useFocusEffect(
     useCallback(() => {
-      const checkDate = async () => {
-        const storedDate = await AsyncStorage.getItem(
-          ASYNC_STORAGE_KEYS.WEDDING_DATE
-        );
-        const currentValidDate = isValidDateString(storedDate)
-          ? storedDate
-          : null;
-        if (currentValidDate !== weddingDate) {
-          console.log("Wedding date change detected, reloading data...");
-          loadAppData();
+      const checkForChanges = async () => {
+        try {
+          const storedDate = await AsyncStorage.getItem(
+            ASYNC_STORAGE_KEYS.WEDDING_DATE
+          );
+          const storedTasks = await AsyncStorage.getItem(
+            ASYNC_STORAGE_KEYS.TASKS
+          );
+
+          const currentValidDate = isValidDateString(storedDate)
+            ? storedDate
+            : null;
+          const currentTasks = storedTasks ? JSON.parse(storedTasks) : [];
+
+          // Check if wedding date changed
+          const dateChanged = currentValidDate !== weddingDate;
+
+          // Check if tasks changed (compare length and completion status)
+          const tasksChanged =
+            currentTasks.length !== allTasks.length ||
+            currentTasks.some(
+              (task: Task, index: number) =>
+                !allTasks[index] || task.completed !== allTasks[index].completed
+            );
+
+          if (dateChanged || tasksChanged) {
+            console.log("Changes detected, reloading data...");
+            loadAppData();
+          }
+        } catch (error) {
+          console.error("Error checking for changes:", error);
         }
       };
+
       if (!isLoading) {
-        checkDate();
+        checkForChanges();
       }
-    }, [loadAppData, weddingDate, isLoading])
+    }, [loadAppData, weddingDate, allTasks, isLoading])
   );
 
   // --- Task Management ---
@@ -276,6 +302,18 @@ export default function ChecklistScreen() {
   };
 
   // --- Wedding Date Handling ---
+  const checkIfShortPlanning = (dateString: string): boolean => {
+    try {
+      const weddingDateObj = new Date(dateString);
+      const today = new Date();
+      const monthsDifference = differenceInMonths(weddingDateObj, today);
+      return monthsDifference <= 6 && monthsDifference >= 0;
+    } catch (error) {
+      console.error("Error checking short planning:", error);
+      return false;
+    }
+  };
+
   const handleSaveWeddingDate = async (newDate: string) => {
     try {
       await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.WEDDING_DATE, newDate);
@@ -283,6 +321,14 @@ export default function ChecklistScreen() {
       const updatedTasks = calculateAllTaskDates(allTasks, newDate);
       saveTasks(updatedTasks);
       setIsDateModalVisible(false);
+
+      // Check if wedding is within 6 months and show short planning modal
+      if (checkIfShortPlanning(newDate)) {
+        // Small delay to let the date modal close first
+        setTimeout(() => {
+          setIsShortPlanningModalVisible(true);
+        }, 500);
+      }
     } catch (error) {
       console.error("Failed to save wedding date:", error);
       Alert.alert("Fout", "Kon de trouwdatum niet opslaan.");
@@ -428,10 +474,18 @@ export default function ChecklistScreen() {
       let dateObj = null;
 
       // First check if the task has the new date property
+      // First check if the task has the new date property
       if (task.date) {
         try {
-          dateObj = parseISO(task.date);
-          if (!isValid(dateObj)) dateObj = null;
+          // Parse Dutch format date (e.g., "15 mei 2025")
+          dateObj = parse(task.date, "dd MMMM yyyy", new Date(), {
+            locale: nl,
+          });
+          if (!isValid(dateObj)) {
+            // Fallback: try parsing as ISO string
+            dateObj = parseISO(task.date);
+            if (!isValid(dateObj)) dateObj = null;
+          }
         } catch (e) {
           dateObj = null;
         }
@@ -439,7 +493,7 @@ export default function ChecklistScreen() {
       // Then try the calculatedDate (for backward compatibility)
       else if (task.calculatedDate) {
         try {
-          // match “Voor 15 mei 2025”
+          // match "Voor 15 mei 2025"
           const dateMatch = task.calculatedDate.match(
             /Voor\s+(\d{1,2}\s+[A-Za-zéû]+\s+\d{4})/
           );
@@ -478,8 +532,75 @@ export default function ChecklistScreen() {
         groupedByMonth["Geen Datum"].push(task);
       }
     });
+    // 3. Sort tasks within each month by date
+    Object.keys(groupedByMonth).forEach((monthYear) => {
+      if (monthYear !== "Geen Datum") {
+        groupedByMonth[monthYear].sort((a, b) => {
+          const getTaskDateForSorting = (task: Task): Date | null => {
+            // First try the date property
+            if (task.date) {
+              try {
+                const dateObj = parse(task.date, "dd MMMM yyyy", new Date(), {
+                  locale: nl,
+                });
+                if (isValid(dateObj)) return dateObj;
+              } catch (e) {
+                // Fallback to parseISO
+                try {
+                  const isoDate = parseISO(task.date);
+                  if (isValid(isoDate)) return isoDate;
+                } catch (e2) {
+                  // Continue to calculatedDate
+                }
+              }
+            }
 
-    // 3. Convert to array and sort by month
+            // Then try calculatedDate
+            if (task.calculatedDate) {
+              try {
+                const dateMatch = task.calculatedDate.match(
+                  /Voor\s+(\d{1,2}\s+[A-Za-zéû]+\s+\d{4})/
+                );
+                if (dateMatch && dateMatch[1]) {
+                  const dateObj = parse(
+                    dateMatch[1],
+                    "dd MMMM yyyy",
+                    new Date(),
+                    { locale: nl }
+                  );
+                  if (isValid(dateObj)) return dateObj;
+                }
+              } catch (e) {
+                // Continue to relative date calculation
+              }
+            }
+
+            // Finally try calculating from relative date
+            if (weddingDate && task.relativeDueDate) {
+              return getTaskDate(task, weddingDate);
+            }
+
+            return null;
+          };
+
+          const dateA = getTaskDateForSorting(a);
+          const dateB = getTaskDateForSorting(b);
+
+          // If both have dates, sort by date (earliest first)
+          if (dateA && dateB) {
+            return compareAsc(dateA, dateB);
+          }
+
+          // Tasks with dates come before tasks without dates
+          if (dateA && !dateB) return -1;
+          if (!dateA && dateB) return 1;
+
+          // If neither has a date, maintain original order
+          return 0;
+        });
+      }
+    });
+    // 4. Convert to array and sort by month
     const sections: TaskSection[] = Object.keys(groupedByMonth).map(
       (monthYear) => ({
         title: monthYear,
@@ -629,6 +750,12 @@ export default function ChecklistScreen() {
         onSaveDate={handleSaveWeddingDate}
       />
 
+      <ShortPlanningModal
+        visible={isShortPlanningModalVisible}
+        onClose={() => setIsShortPlanningModalVisible(false)}
+        blogUrl="https://www.girlsofhonour.nl/"
+      />
+
       {/* Task Date Picker Modal */}
       <Modal
         visible={isTaskDatePickerVisible}
@@ -656,7 +783,9 @@ export default function ChecklistScreen() {
                 <MaterialIcons name="chevron-left" size={24} color="#DA6F57" />
               </TouchableOpacity>
               <Text style={styles.monthYearText}>
-                {format(new Date(selectedYear, selectedMonth, 1), "MMMM yyyy",{locale: nl})}
+                {format(new Date(selectedYear, selectedMonth, 1), "MMMM yyyy", {
+                  locale: nl,
+                })}
               </Text>
               <TouchableOpacity
                 onPress={handleNextMonth}
@@ -732,7 +861,8 @@ export default function ChecklistScreen() {
                   {selectedDay
                     ? `Deadline instellen: ${format(
                         new Date(selectedYear, selectedMonth, selectedDay),
-                        "dd MMMM yyyy", { locale: nl }
+                        "dd MMMM yyyy",
+                        { locale: nl }
                       )}`
                     : "Selecteer een datum"}
                 </Text>
@@ -744,7 +874,9 @@ export default function ChecklistScreen() {
 
       <Text style={styles.title}>
         {weddingDate
-          ? `Bruiloft: ${format(new Date(weddingDate), "dd MMMM yyyy", { locale: nl })}`
+          ? `Bruiloft: ${format(new Date(weddingDate), "dd MMMM yyyy", {
+              locale: nl,
+            })}`
           : "Bruiloft Checklist"}
       </Text>
 

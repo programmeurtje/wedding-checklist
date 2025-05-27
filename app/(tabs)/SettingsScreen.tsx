@@ -10,6 +10,10 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DatePickerModal } from "react-native-paper-dates";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useRouter } from "expo-router";
@@ -176,26 +180,37 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
 
-        <DatePickerModal
-          locale="nl"
-          mode="single"
-          visible={datePickerVisible}
-          onDismiss={onDismiss}
-          date={weddingDate || new Date()}
-          onConfirm={onConfirm}
-          saveLabel="Bevestigen"
-          label="Selecteer een datum"
-          validRange={{
-            startDate: new Date(new Date().setHours(0, 0, 0, 0)),
+        <DateTimePickerModal
+          isVisible={datePickerVisible}
+          mode="date"
+          onConfirm={(date) => {
+            // The DateTimePickerModal returns a Date object directly
+            if (!date) {
+              Alert.alert(
+                "Ongeldige datum",
+                "Selecteer vandaag of een toekomstige datum."
+              );
+              return;
+            }
+            if (date < new Date(new Date().setHours(0, 0, 0, 0))) {
+              Alert.alert(
+                "Ongeldige datum",
+                "Selecteer vandaag of een toekomstige datum."
+              );
+              return;
+            }
+            setWeddingDate(date);
+            setDatePickerVisible(false);
           }}
+          onCancel={() => setDatePickerVisible(false)}
+          minimumDate={new Date()}
+          confirmTextIOS="Bevestigen"
+          cancelTextIOS="Annuleren"
         />
       </View>
 
       <TouchableOpacity
-        style={[
-          styles.actionButton, 
-          !weddingDate && styles.disabledButton,
-        ]}
+        style={[styles.actionButton, !weddingDate && styles.disabledButton]}
         onPress={saveWeddingDate}
         disabled={!weddingDate || isLoading}
       >
@@ -215,9 +230,7 @@ export default function SettingsScreen() {
       >
         <Text style={styles.actionButtonText}>Gegevens resetten</Text>
       </TouchableOpacity>
-      <Text style={styles.warningText}>
-        Reset alle taken en de trouwdatum.
-      </Text>
+      <Text style={styles.warningText}>Reset alle taken en de trouwdatum.</Text>
     </View>
   );
 }
