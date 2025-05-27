@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FFF9F6",
     paddingHorizontal: 15,
-    paddingTop: Platform.OS === "android" ? 30 : 50,
+    paddingTop: Platform.OS === "android" ? 50 : 50,
   },
   title: {
     fontSize: 24,

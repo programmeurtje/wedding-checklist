@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === "android" ? 30 : 50,
+    paddingTop: Platform.OS === "android" ? 50 : 50,
     backgroundColor: "#FFF9F6",
   },
   title: {

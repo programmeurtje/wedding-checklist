@@ -19,6 +19,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { CheckBox } from "react-native-elements";
 import WeddingDateModal from "../../components/WeddingDateModal";
 import ShortPlanningModal from "../../components/ShortPlanningModal";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import uuid from "react-native-uuid";
 import {
   format,
@@ -627,6 +628,7 @@ export default function ChecklistScreen() {
     };
 
     return (
+      
       <View style={styles.taskCard}>
         {/* Row for Checkbox and Main Content */}
         <View style={styles.taskRow}>
@@ -966,7 +968,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 15,
-    paddingTop: Platform.OS === "android" ? 30 : 50,
+    paddingTop: Platform.OS === "android" ? 50 : 50,
     backgroundColor: "#FFF9F6",
   },
   title: {
