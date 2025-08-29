@@ -12,6 +12,8 @@ import {
   Alert,
   SectionList,
   Modal,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -19,7 +21,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { CheckBox } from "react-native-elements";
 import WeddingDateModal from "../../components/WeddingDateModal";
 import ShortPlanningModal from "../../components/ShortPlanningModal";
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from "react-native-safe-area-context";
 import uuid from "react-native-uuid";
 import {
   format,
@@ -70,6 +72,15 @@ export default function ChecklistScreen() {
     new Date().getFullYear()
   );
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+
+  // State for editing existing task dates
+  const [editingTaskDateId, setEditingTaskDateId] = useState<string | null>(
+    null
+  );
+
+  // State for inline editing task titles
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskText, setEditingTaskText] = useState<string>("");
 
   // --- Data Loading and Initialization ---
 
@@ -124,7 +135,7 @@ export default function ChecklistScreen() {
           return {
             ...task,
             calculatedDate: calculatedDate
-              ? `Voor ${format(calculatedDate, "dd MMMM yyyy", { locale: nl })}`
+              ? `${format(calculatedDate, "dd MMMM yyyy", { locale: nl })}`
               : undefined,
           };
         } catch (error) {
@@ -278,13 +289,13 @@ export default function ChecklistScreen() {
       text: newTaskText.trim(),
       completed: false,
       calculatedDate: newTaskDate
-        ? `Voor ${format(newTaskDate, "dd MMMM yyyy", { locale: nl })}`
+        ? `${format(newTaskDate, "dd MMMM yyyy", { locale: nl })}`
         : undefined,
     };
 
     if (newTaskDate) {
       newTaskObj.date = format(newTaskDate, "dd MMMM yyyy", { locale: nl });
-      newTaskObj.calculatedDate = `Voor ${format(newTaskDate, "dd MMMM yyyy", {
+      newTaskObj.calculatedDate = `${format(newTaskDate, "dd MMMM yyyy", {
         locale: nl,
       })}`;
     }
@@ -338,11 +349,13 @@ export default function ChecklistScreen() {
 
   // --- Date Picker for Task ---
   const openTaskDatePicker = () => {
+    console.log("Opening date picker for new task");
     const today = new Date();
     setSelectedMonth(today.getMonth());
     setSelectedYear(today.getFullYear());
     setSelectedDay(null);
     setIsTaskDatePickerVisible(true);
+    console.log("New task date picker should be visible now");
   };
 
   const getDaysInMonth = (month: number, year: number) => {
@@ -391,7 +404,89 @@ export default function ChecklistScreen() {
   };
 
   const confirmTaskDate = () => {
+    console.log("confirmTaskDate called", {
+      editingTaskDateId,
+      newTaskDate,
+    });
+
+    if (editingTaskDateId && newTaskDate) {
+      console.log("Updating task date");
+      // Update existing task with new date
+      const updatedTasks = allTasks.map((task) =>
+        task.id === editingTaskDateId
+          ? {
+              ...task,
+              date: format(newTaskDate, "dd MMMM yyyy", { locale: nl }),
+              calculatedDate: `${format(newTaskDate, "dd MMMM yyyy", {
+                locale: nl,
+              })}`,
+            }
+          : task
+      );
+      saveTasks(updatedTasks);
+      setEditingTaskDateId(null);
+    }
+    // For new tasks, newTaskDate is already set by handleDaySelect
+    // Just close the modal - the date will be used when adding the task
+
     setIsTaskDatePickerVisible(false);
+    setSelectedDay(null);
+  };
+
+  const openTaskDatePickerForExisting = (taskId: string) => {
+    console.log("Opening date picker for task:", taskId);
+    setEditingTaskDateId(taskId);
+    const today = new Date();
+    setSelectedMonth(today.getMonth());
+    setSelectedYear(today.getFullYear());
+    setSelectedDay(null);
+    setNewTaskDate(null);
+    setIsTaskDatePickerVisible(true);
+    console.log("Date picker should be visible now");
+  };
+
+  // Functions for inline editing tasks
+  const startEditingTask = (task: Task) => {
+    setEditingTaskId(task.id);
+    setEditingTaskText(task.text);
+  };
+
+  const saveTaskEdit = (taskId: string) => {
+    if (!editingTaskText.trim()) {
+      cancelTaskEdit();
+      return;
+    }
+
+    const updatedTasks = allTasks.map((task) =>
+      task.id === taskId ? { ...task, text: editingTaskText.trim() } : task
+    );
+
+    saveTasks(updatedTasks);
+    setEditingTaskId(null);
+    setEditingTaskText("");
+  };
+
+  const cancelTaskEdit = () => {
+    setEditingTaskId(null);
+    setEditingTaskText("");
+  };
+
+  const deleteTask = (taskId: string) => {
+    Alert.alert(
+      "Taak Verwijderen",
+      "Weet je zeker dat je deze taak wilt verwijderen?",
+      [
+        { text: "Annuleren", style: "cancel" },
+        {
+          text: "Verwijderen",
+          style: "destructive",
+          onPress: () => {
+            const updatedTasks = allTasks.filter((task) => task.id !== taskId);
+            saveTasks(updatedTasks);
+          },
+        },
+      ]
+    );
   };
 
   // --- Section Handling ---
@@ -494,9 +589,9 @@ export default function ChecklistScreen() {
       // Then try the calculatedDate (for backward compatibility)
       else if (task.calculatedDate) {
         try {
-          // match "Voor 15 mei 2025"
+          // match "15 mei 2025"
           const dateMatch = task.calculatedDate.match(
-            /Voor\s+(\d{1,2}\s+[A-Za-zéû]+\s+\d{4})/
+            /\s+(\d{1,2}\s+[A-Za-zéû]+\s+\d{4})/
           );
           if (dateMatch && dateMatch[1]) {
             // parse with Dutch locale and no comma
@@ -560,7 +655,7 @@ export default function ChecklistScreen() {
             if (task.calculatedDate) {
               try {
                 const dateMatch = task.calculatedDate.match(
-                  /Voor\s+(\d{1,2}\s+[A-Za-zéû]+\s+\d{4})/
+                  /\s+(\d{1,2}\s+[A-Za-zéû]+\s+\d{4})/
                 );
                 if (dateMatch && dateMatch[1]) {
                   const dateObj = parse(
@@ -628,7 +723,6 @@ export default function ChecklistScreen() {
     };
 
     return (
-      
       <View style={styles.taskCard}>
         {/* Row for Checkbox and Main Content */}
         <View style={styles.taskRow}>
@@ -641,26 +735,86 @@ export default function ChecklistScreen() {
             size={24}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 0 }}
           />
-          <View style={styles.mainContent}>
-            <Text style={styles.taskTitle}>{item.text}</Text>
-          </View>
+          {editingTaskId === item.id ? (
+            <View style={styles.editingContainer}>
+              <TextInput
+                style={styles.editingInput}
+                value={editingTaskText}
+                onChangeText={setEditingTaskText}
+                onSubmitEditing={() => saveTaskEdit(item.id)}
+                onBlur={() => saveTaskEdit(item.id)}
+                autoFocus
+                multiline
+                returnKeyType="done"
+                blurOnSubmit={true}
+              />
+              <TouchableOpacity
+                style={styles.saveEditButton}
+                onPress={() => saveTaskEdit(item.id)}
+              >
+                <MaterialIcons name="check" size={22} color="#DA6F57" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.mainContent}
+              onPress={() => startEditingTask(item)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.taskTitle}>{item.text}</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => deleteTask(item.id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialIcons name="delete-outline" size={20} color="#999" />
+          </TouchableOpacity>
         </View>
 
-        {/* Row for Date - only shown if it exists */}
-        {item.calculatedDate ? (
-          <View style={styles.detailsRow}>
-            <View style={styles.detailsSpacer} />
-            <View style={styles.detailItem}>
-              <MaterialIcons
-                name="calendar-today"
-                size={14}
-                color={styles.detailText.color}
-                style={styles.iconStyle}
-              />
-              <Text style={styles.detailText}>{item.calculatedDate}</Text>
-            </View>
+        {/* Row for Date and Actions */}
+        <View style={styles.detailsRow}>
+          <View style={styles.detailsSpacer} />
+          <View style={styles.detailsContent}>
+            {item.calculatedDate ? (
+              <TouchableOpacity
+                style={styles.detailItem}
+                onPress={() => openTaskDatePickerForExisting(item.id)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons
+                  name="calendar-today"
+                  size={14}
+                  color="#DA6F57"
+                  style={styles.iconStyle}
+                />
+                <Text style={[styles.detailText, { color: "#DA6F57" }]}>
+                  {item.calculatedDate}
+                </Text>
+                <MaterialIcons
+                  name="edit"
+                  size={12}
+                  color="#DA6F57"
+                  style={{ marginLeft: 4 }}
+                />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.addDateButton}
+                onPress={() => openTaskDatePickerForExisting(item.id)}
+              >
+                <MaterialIcons
+                  name="event-available"
+                  size={16}
+                  color="#DA6F57"
+                  style={styles.iconStyle}
+                />
+                <Text style={styles.addDateText}>Deadline toevoegen</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        ) : null}
+        </View>
 
         {/* Link as a separate block */}
         {item.link ? (
@@ -758,17 +912,22 @@ export default function ChecklistScreen() {
         blogUrl="https://www.girlsofhonour.nl/"
       />
 
-      {/* Task Date Picker Modal */}
+      {/* Task Date Picker Modal - Rendered last to appear on top */}
       <Modal
         visible={isTaskDatePickerVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setIsTaskDatePickerVisible(false)}
+        onRequestClose={() => {
+          console.log("Date picker modal closing");
+          setIsTaskDatePickerVisible(false);
+        }}
       >
         <View style={styles.datePickerModalOverlay}>
           <View style={styles.datePickerModalContent}>
             <View style={styles.datePickerHeader}>
-              <Text style={styles.datePickerTitle}>Selecteer Deadline</Text>
+              <Text style={styles.datePickerTitle}>
+                {editingTaskDateId ? "Deadline Wijzigen" : "Selecteer Deadline"}
+              </Text>
               <TouchableOpacity
                 onPress={() => setIsTaskDatePickerVisible(false)}
                 style={styles.datePickerCloseButton}
@@ -861,7 +1020,9 @@ export default function ChecklistScreen() {
               >
                 <Text style={styles.datePickerConfirmText}>
                   {selectedDay
-                    ? `Deadline instellen: ${format(
+                    ? `${
+                        editingTaskDateId ? "Wijzig" : "Stel"
+                      } deadline in: ${format(
                         new Date(selectedYear, selectedMonth, selectedDay),
                         "dd MMMM yyyy",
                         { locale: nl }
@@ -905,11 +1066,22 @@ export default function ChecklistScreen() {
           </TouchableOpacity>
         </View>
         <TouchableOpacity
-          style={styles.addButton}
+          style={[
+            styles.addButton,
+            !newTaskText.trim() && styles.addButtonDisabled,
+          ]}
           onPress={addTask}
           disabled={!newTaskText.trim()}
+          activeOpacity={!newTaskText.trim() ? 1 : 0.7}
         >
-          <Text style={styles.addButtonText}>+</Text>
+          <Text
+            style={[
+              styles.addButtonText,
+              !newTaskText.trim() && styles.addButtonTextDisabled,
+            ]}
+          >
+            +
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -947,6 +1119,9 @@ export default function ChecklistScreen() {
           </Text>
         }
         contentContainerStyle={styles.listContentContainer}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+        scrollEventThrottle={16}
       />
     </View>
   );
@@ -1008,12 +1183,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 44, // Better touch target
+  },
+  addButtonDisabled: {
+    backgroundColor: "#E0E0E0",
+    opacity: 0.6,
   },
   addButtonText: {
     color: "#FFF",
     fontSize: 24,
     fontWeight: "bold",
     lineHeight: 26,
+  },
+  addButtonTextDisabled: {
+    color: "#999",
   },
   selectedDateDisplay: {
     flexDirection: "row",
@@ -1046,6 +1229,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 9999,
   },
   datePickerModalContent: {
     width: "85%",
@@ -1056,7 +1240,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    elevation: 5,
+    elevation: 15,
+    zIndex: 10000,
   },
   datePickerHeader: {
     flexDirection: "row",
@@ -1151,16 +1336,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F9EAE5", // Light theme color
-    paddingVertical: 10,
+    backgroundColor: "#FFF9F6", // Match app background
+    paddingVertical: 12,
     paddingHorizontal: 15,
-    borderRadius: 8,
-    marginVertical: 8,
+    borderRadius: 0, // Remove border radius for sticky headers
+    marginVertical: 0,
+    marginBottom: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: "#F9EAE5",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 16,
@@ -1227,10 +1415,36 @@ const styles = StyleSheet.create({
   detailsSpacer: {
     width: 24 + 5,
   },
+  detailsContent: {
+    flex: 1,
+  },
   detailItem: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: "#F9EAE5",
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  addDateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: "#F9EAE5",
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  addDateText: {
+    fontSize: 12,
+    color: "#DA6F57",
+    fontWeight: "500",
+  },
+  deleteButton: {
+    padding: 8,
+    marginLeft: 8,
   },
   detailSeparator: {
     width: 1,
@@ -1279,5 +1493,35 @@ const styles = StyleSheet.create({
   },
   arrowIconStyle: {
     marginLeft: 6,
+  },
+  // --- Inline Editing Styles ---
+  editingContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9F9F9",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  editingInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#333",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#DA6F57",
+    marginRight: 8,
+    minHeight: 36,
+  },
+  saveEditButton: {
+    padding: 8,
+    backgroundColor: "#F9EAE5",
+    borderRadius: 6,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

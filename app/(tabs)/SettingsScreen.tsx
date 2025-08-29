@@ -7,13 +7,9 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { DatePickerModal } from "react-native-paper-dates";
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
-import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { format } from "date-fns";
 import { nl } from "date-fns/locale";
 import { useRouter } from "expo-router";
@@ -22,9 +18,18 @@ import { MaterialIcons } from "@expo/vector-icons";
 
 export default function SettingsScreen() {
   const [weddingDate, setWeddingDate] = useState<Date | null>(null);
-  const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+
+  // Custom datepicker state
+  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<number>(
+    new Date().getMonth()
+  );
+  const [selectedYear, setSelectedYear] = useState<number>(
+    new Date().getFullYear()
+  );
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   const loadWeddingDate = useCallback(async () => {
     setIsLoading(true);
@@ -49,31 +54,71 @@ export default function SettingsScreen() {
     loadWeddingDate();
   }, [loadWeddingDate]);
 
-  const onDismiss = () => {
-    setDatePickerVisible(false);
+  // Custom datepicker functions
+  const openDatePicker = () => {
+    const today = new Date();
+    setSelectedMonth(weddingDate ? weddingDate.getMonth() : today.getMonth());
+    setSelectedYear(
+      weddingDate ? weddingDate.getFullYear() : today.getFullYear()
+    );
+    setSelectedDay(weddingDate ? weddingDate.getDate() : null);
+    setIsDatePickerVisible(true);
   };
 
-  const onConfirm = ({ date }: { date: Date | undefined }) => {
-    setDatePickerVisible(false);
-    if (!date) {
+  const getDaysInMonth = (month: number, year: number) => {
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  const getDayArray = (month: number, year: number) => {
+    const daysInMonth = getDaysInMonth(month, year);
+    const dayArray = [];
+    for (let i = 1; i <= daysInMonth; i++) {
+      dayArray.push(i);
+    }
+    return dayArray;
+  };
+
+  const handleDaySelect = (day: number) => {
+    setSelectedDay(day);
+  };
+
+  const handlePrevMonth = () => {
+    if (selectedMonth === 0) {
+      setSelectedMonth(11);
+      setSelectedYear(selectedYear - 1);
+    } else {
+      setSelectedMonth(selectedMonth - 1);
+    }
+    setSelectedDay(null);
+  };
+
+  const handleNextMonth = () => {
+    if (selectedMonth === 11) {
+      setSelectedMonth(0);
+      setSelectedYear(selectedYear + 1);
+    } else {
+      setSelectedMonth(selectedMonth + 1);
+    }
+    setSelectedDay(null);
+  };
+
+  const confirmDate = () => {
+    if (!selectedDay) return;
+
+    const selectedDate = new Date(selectedYear, selectedMonth, selectedDay);
+
+    // Check if date is in the past
+    if (selectedDate < new Date(new Date().setHours(0, 0, 0, 0))) {
       Alert.alert(
         "Ongeldige datum",
         "Selecteer vandaag of een toekomstige datum."
       );
       return;
     }
-    if (date < new Date(new Date().setHours(0, 0, 0, 0))) {
-      Alert.alert(
-        "Ongeldige datum",
-        "Selecteer vandaag of een toekomstige datum."
-      );
-      return;
-    }
-    setWeddingDate(date);
-  };
 
-  const toggleDatePicker = () => {
-    setDatePickerVisible(true);
+    setWeddingDate(selectedDate);
+    setIsDatePickerVisible(false);
+    setSelectedDay(null);
   };
 
   const saveWeddingDate = async () => {
@@ -139,7 +184,7 @@ export default function SettingsScreen() {
     }
   };
 
-  if (isLoading && !datePickerVisible) {
+  if (isLoading && !isDatePickerVisible) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#DA6F57" />
@@ -155,7 +200,7 @@ export default function SettingsScreen() {
         <Text style={styles.label}>Jullie trouwdatum:</Text>
 
         <TouchableOpacity
-          onPress={toggleDatePicker}
+          onPress={openDatePicker}
           style={styles.datePickerButton}
           activeOpacity={0.8}
         >
@@ -180,33 +225,147 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
 
-        <DateTimePickerModal
-          isVisible={datePickerVisible}
-          mode="date"
-          onConfirm={(date) => {
-            // The DateTimePickerModal returns a Date object directly
-            if (!date) {
-              Alert.alert(
-                "Ongeldige datum",
-                "Selecteer vandaag of een toekomstige datum."
-              );
-              return;
-            }
-            if (date < new Date(new Date().setHours(0, 0, 0, 0))) {
-              Alert.alert(
-                "Ongeldige datum",
-                "Selecteer vandaag of een toekomstige datum."
-              );
-              return;
-            }
-            setWeddingDate(date);
-            setDatePickerVisible(false);
-          }}
-          onCancel={() => setDatePickerVisible(false)}
-          minimumDate={new Date()}
-          confirmTextIOS="Bevestigen"
-          cancelTextIOS="Annuleren"
-        />
+        {/* Custom Date Picker Modal */}
+        <Modal
+          visible={isDatePickerVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsDatePickerVisible(false)}
+        >
+          <View style={styles.datePickerModalOverlay}>
+            <View style={styles.datePickerModalContent}>
+              <View style={styles.datePickerHeader}>
+                <Text style={styles.datePickerTitle}>Selecteer Trouwdatum</Text>
+                <TouchableOpacity
+                  onPress={() => setIsDatePickerVisible(false)}
+                  style={styles.datePickerCloseButton}
+                >
+                  <MaterialIcons name="close" size={24} color="#333" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.monthSelector}>
+                <TouchableOpacity
+                  onPress={handlePrevMonth}
+                  style={styles.monthNavButton}
+                >
+                  <MaterialIcons
+                    name="chevron-left"
+                    size={24}
+                    color="#DA6F57"
+                  />
+                </TouchableOpacity>
+                <Text style={styles.monthYearText}>
+                  {format(
+                    new Date(selectedYear, selectedMonth, 1),
+                    "MMMM yyyy",
+                    {
+                      locale: nl,
+                    }
+                  )}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleNextMonth}
+                  style={styles.monthNavButton}
+                >
+                  <MaterialIcons
+                    name="chevron-right"
+                    size={24}
+                    color="#DA6F57"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.weekdayHeader}>
+                {["Zo", "Ma", "Di", "Wo", "Do", "Vr", "Za"].map(
+                  (day, index) => (
+                    <Text key={index} style={styles.weekdayText}>
+                      {day}
+                    </Text>
+                  )
+                )}
+              </View>
+
+              <View style={styles.calendarGrid}>
+                {(() => {
+                  const days = getDayArray(selectedMonth, selectedYear);
+                  const firstDayOfMonth = new Date(
+                    selectedYear,
+                    selectedMonth,
+                    1
+                  ).getDay();
+                  const calendarCells = [];
+
+                  // Add empty cells for days before the 1st of the month
+                  for (let i = 0; i < firstDayOfMonth; i++) {
+                    calendarCells.push(
+                      <View key={`empty-${i}`} style={styles.calendarCell} />
+                    );
+                  }
+
+                  // Add cells for each day of the month
+                  days.forEach((day) => {
+                    const isSelected = day === selectedDay;
+                    const cellDate = new Date(selectedYear, selectedMonth, day);
+                    const isToday =
+                      cellDate.toDateString() === new Date().toDateString();
+                    const isPast =
+                      cellDate < new Date(new Date().setHours(0, 0, 0, 0));
+
+                    calendarCells.push(
+                      <TouchableOpacity
+                        key={`day-${day}`}
+                        style={[
+                          styles.calendarCell,
+                          isSelected && styles.selectedCalendarCell,
+                          isPast && styles.pastCalendarCell,
+                        ]}
+                        onPress={() => !isPast && handleDaySelect(day)}
+                        disabled={isPast}
+                      >
+                        <Text
+                          style={[
+                            styles.calendarCellText,
+                            isSelected && styles.selectedCalendarCellText,
+                            isPast && styles.pastCalendarCellText,
+                            isToday &&
+                              !isSelected &&
+                              styles.todayCalendarCellText,
+                          ]}
+                        >
+                          {day}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  });
+
+                  return calendarCells;
+                })()}
+              </View>
+
+              <View style={styles.datePickerFooter}>
+                <TouchableOpacity
+                  style={[
+                    styles.datePickerConfirmButton,
+                    !selectedDay && styles.datePickerDisabledButton,
+                  ]}
+                  onPress={confirmDate}
+                  disabled={!selectedDay}
+                >
+                  <Text style={styles.datePickerConfirmText}>
+                    {selectedDay
+                      ? `Stel trouwdatum in: ${format(
+                          new Date(selectedYear, selectedMonth, selectedDay),
+                          "dd MMMM yyyy",
+                          { locale: nl }
+                        )}`
+                      : "Selecteer een datum"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
 
       <TouchableOpacity
@@ -214,7 +373,7 @@ export default function SettingsScreen() {
         onPress={saveWeddingDate}
         disabled={!weddingDate || isLoading}
       >
-        {isLoading && !datePickerVisible ? (
+        {isLoading && !isDatePickerVisible ? (
           <ActivityIndicator color="#FFF" />
         ) : (
           <Text style={styles.actionButtonText}>Trouwdatum opslaan</Text>
@@ -336,5 +495,123 @@ const styles = StyleSheet.create({
     color: "#757575",
     textAlign: "center",
     marginTop: -10, // Pull up slightly below button
+  },
+  // --- Custom Date Picker Modal Styles ---
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+  },
+  datePickerModalContent: {
+    width: "85%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 15,
+    padding: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 15,
+    zIndex: 10000,
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+  },
+  datePickerCloseButton: {
+    padding: 5,
+  },
+  monthSelector: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  monthNavButton: {
+    padding: 8,
+  },
+  monthYearText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#DA6F57",
+  },
+  weekdayHeader: {
+    flexDirection: "row",
+    marginBottom: 10,
+  },
+  weekdayText: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: 14,
+    color: "#666",
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 15,
+  },
+  calendarCell: {
+    width: "14.28%", // 7 days per week (100% / 7)
+    aspectRatio: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 5,
+  },
+  calendarCellText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  selectedCalendarCell: {
+    backgroundColor: "#DA6F57",
+    borderRadius: 20,
+  },
+  selectedCalendarCellText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  pastCalendarCell: {
+    opacity: 0.3,
+  },
+  pastCalendarCellText: {
+    color: "#999",
+  },
+  todayCalendarCellText: {
+    color: "#DA6F57",
+    fontWeight: "600",
+  },
+  datePickerFooter: {
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+    paddingTop: 15,
+    alignItems: "center",
+  },
+  datePickerConfirmButton: {
+    backgroundColor: "#DA6F57",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  datePickerConfirmText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  datePickerDisabledButton: {
+    backgroundColor: "#BDBDBD",
   },
 });
