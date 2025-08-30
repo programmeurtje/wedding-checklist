@@ -39,7 +39,7 @@ import {
 import { nl } from "date-fns/locale";
 
 import { ASYNC_STORAGE_KEYS, Task } from "../../constants/appConfig";
-import { defaultTasks as defaultTaskTemplates } from "../../data/defaultTasks";
+import { getDefaultTasks } from "../../data/defaultTasks";
 
 // Type for our section data
 interface TaskSection {
@@ -86,8 +86,21 @@ export default function ChecklistScreen() {
 
   const calculateAllTaskDates = useCallback(
     (tasks: Task[], currentWeddingDate: string | null): Task[] => {
+      console.log(
+        "Calculating dates for",
+        tasks.length,
+        "tasks with wedding date:",
+        currentWeddingDate
+      );
       if (!isValidDateString(currentWeddingDate)) {
-        return tasks.map((task) => ({ ...task, calculatedDate: undefined }));
+        console.log(
+          "No valid wedding date, returning tasks without calculated dates"
+        );
+        return tasks.map((task) => ({
+          ...task,
+          calculatedDate: undefined,
+          date: undefined,
+        }));
       }
 
       const today = new Date();
@@ -132,15 +145,24 @@ export default function ChecklistScreen() {
             calculatedDate = addDays(today, 1);
           }
 
+          const formattedDate = calculatedDate
+            ? `${format(calculatedDate, "dd MMMM yyyy", { locale: nl })}`
+            : undefined;
+
+          console.log(
+            `Task "${task.text}" - Relative: ${JSON.stringify(
+              task.relativeDueDate
+            )} - Calculated: ${formattedDate}`
+          );
+
           return {
             ...task,
-            calculatedDate: calculatedDate
-              ? `${format(calculatedDate, "dd MMMM yyyy", { locale: nl })}`
-              : undefined,
+            calculatedDate: formattedDate,
+            date: formattedDate, // Also set the date property for consistency
           };
         } catch (error) {
           console.error("Error calculating date for task:", error);
-          return { ...task, calculatedDate: undefined };
+          return { ...task, calculatedDate: undefined, date: undefined };
         }
       });
     },
@@ -173,15 +195,17 @@ export default function ChecklistScreen() {
           currentWeddingDate
         );
       } else {
+        const defaultTaskTemplates = await getDefaultTasks();
         tasksToProcess = defaultTaskTemplates.map((template) => ({
           ...template,
           id: uuid.v4() as string,
           completed: false,
-          // calculatedDate: calculateDateFromWedding(
-          //   currentWeddingDate,
-          //   template.relativeDueDate
-          // ),
         }));
+        // Calculate dates for new default tasks
+        tasksToProcess = calculateAllTaskDates(
+          tasksToProcess,
+          currentWeddingDate
+        );
         await AsyncStorage.setItem(
           ASYNC_STORAGE_KEYS.TASKS,
           JSON.stringify(tasksToProcess)

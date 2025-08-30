@@ -15,10 +15,12 @@ import { nl } from "date-fns/locale";
 import { useRouter } from "expo-router";
 import { ASYNC_STORAGE_KEYS } from "../../constants/appConfig";
 import { MaterialIcons } from "@expo/vector-icons";
+import { AdminTasksModal } from "../../components/AdminTasksModal";
 
 export default function SettingsScreen() {
   const [weddingDate, setWeddingDate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const router = useRouter();
 
   // Custom datepicker state
@@ -383,6 +385,19 @@ export default function SettingsScreen() {
       <View style={styles.divider} />
 
       <TouchableOpacity
+        style={[styles.actionButton, styles.adminButton]}
+        onPress={() => setShowAdminModal(true)}
+        disabled={isLoading}
+      >
+        <Text style={styles.actionButtonText}>Admin: Beheer Default Taken</Text>
+      </TouchableOpacity>
+      <Text style={styles.warningText}>
+        Voor beheerders: pas standaard taken aan voor alle gebruikers.
+      </Text>
+
+      <View style={styles.divider} />
+
+      <TouchableOpacity
         style={[styles.actionButton, styles.clearButton]}
         onPress={confirmClearData}
         disabled={isLoading}
@@ -390,6 +405,11 @@ export default function SettingsScreen() {
         <Text style={styles.actionButtonText}>Gegevens resetten</Text>
       </TouchableOpacity>
       <Text style={styles.warningText}>Reset alle taken en de trouwdatum.</Text>
+
+      <AdminTasksModal
+        visible={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
+      />
     </View>
   );
 }
@@ -486,6 +506,10 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#E0E0E0",
     marginVertical: 25,
+  },
+
+  adminButton: {
+    backgroundColor: "#4CAF50", // Green for admin functions
   },
   clearButton: {
     backgroundColor: "#B71C1C", // Destructive red color
