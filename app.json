@@ -1,18 +1,43 @@
 {
   "expo": {
-    "name": "wedding-planner-checklist",
-    "slug": "wedding-planner-checklist",
+    "name": "Bruiloft Checklist",
+    "slug": "bruiloft-checklist",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "bruiloft-checklist",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "description": "Een handige checklist app om je bruiloft perfect te organiseren. Houd al je taken bij en mis niets voor je grote dag!",
+    "keywords": [
+      "bruiloft",
+      "wedding",
+      "checklist",
+      "planner",
+      "organisatie",
+      "trouwen"
+    ],
+    "primaryColor": "#DA6F57",
+    "privacy": "public",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.superabraham.weddingplannerchecklist",
+      "bundleIdentifier": "com.superabraham.bruiloftchecklist",
+      "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "firebaseapp.com": {
+              "NSExceptionAllowsInsecureHTTPLoads": false,
+              "NSExceptionMinimumTLSVersion": "1.0",
+              "NSExceptionRequiresForwardSecrecy": false
+            }
+          }
+        }
+      },
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
@@ -20,7 +45,15 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.superabraham.weddingplannerchecklist"
+      "package": "com.superabraham.bruiloftchecklist",
+      "versionCode": 1,
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -35,7 +68,7 @@
           "image": "./assets/images/GirlsofhonourLogo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#FFF9F6"
         }
       ]
     ],

@@ -21,6 +21,8 @@ export default function SettingsScreen() {
   const [weddingDate, setWeddingDate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [isDeveloperMode, setIsDeveloperMode] = useState(false);
+  const [titleClickCount, setTitleClickCount] = useState(0);
   const router = useRouter();
 
   // Custom datepicker state
@@ -186,6 +188,30 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleTitlePress = () => {
+    const newCount = titleClickCount + 1;
+    setTitleClickCount(newCount);
+
+    if (newCount === 7) {
+      setIsDeveloperMode(true);
+      setTitleClickCount(0);
+      Alert.alert(
+        "Developer Mode",
+        "Developer mode geactiveerd! Admin functies zijn nu zichtbaar."
+      );
+    } else if (newCount === 1 && isDeveloperMode) {
+      // Single tap when already in dev mode - toggle off
+      setIsDeveloperMode(false);
+      setTitleClickCount(0);
+      Alert.alert("Developer Mode", "Developer mode gedeactiveerd.");
+    }
+
+    // Reset counter after 2 seconds of inactivity
+    setTimeout(() => {
+      setTitleClickCount(0);
+    }, 2000);
+  };
+
   if (isLoading && !isDatePickerVisible) {
     return (
       <View style={styles.loadingContainer}>
@@ -196,7 +222,9 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Instellingen</Text>
+      <TouchableOpacity onPress={handleTitlePress} activeOpacity={0.8}>
+        <Text style={styles.title}>Instellingen{isDeveloperMode && " 🔧"}</Text>
+      </TouchableOpacity>
 
       <View style={styles.dateSection}>
         <Text style={styles.label}>Jullie trouwdatum:</Text>
@@ -384,18 +412,23 @@ export default function SettingsScreen() {
 
       <View style={styles.divider} />
 
-      <TouchableOpacity
-        style={[styles.actionButton, styles.adminButton]}
-        onPress={() => setShowAdminModal(true)}
-        disabled={isLoading}
-      >
-        <Text style={styles.actionButtonText}>Admin: Beheer Default Taken</Text>
-      </TouchableOpacity>
-      <Text style={styles.warningText}>
-        Voor beheerders: pas standaard taken aan voor alle gebruikers.
-      </Text>
-
-      <View style={styles.divider} />
+      {isDeveloperMode && (
+        <>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.adminButton]}
+            onPress={() => setShowAdminModal(true)}
+            disabled={isLoading}
+          >
+            <Text style={styles.actionButtonText}>
+              Admin: Beheer Default Taken
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.warningText}>
+            Voor beheerders: pas standaard taken aan voor alle gebruikers.
+          </Text>
+          <View style={styles.divider} />
+        </>
+      )}
 
       <TouchableOpacity
         style={[styles.actionButton, styles.clearButton]}

@@ -1059,13 +1059,23 @@ export default function ChecklistScreen() {
         </View>
       </Modal>
 
-      <Text style={styles.title}>
-        {weddingDate
-          ? `Bruiloft: ${format(new Date(weddingDate), "dd MMMM yyyy", {
-              locale: nl,
-            })}`
-          : "Bruiloft Checklist"}
-      </Text>
+      {/* HEADER */}
+      <View style={styles.headerWrap}>
+        <Text style={styles.brandHeading}>GIRLS OF HONOUR</Text>
+
+        <Text style={styles.appHeading}>
+          {weddingDate ? "BRUILOFT" : "BRUILOFT CHECKLIST"}
+        </Text>
+
+        {weddingDate ? (
+          <View style={styles.datePill}>
+            <MaterialIcons name="favorite-border" size={14} color="#DA6F57" />
+            <Text style={styles.datePillText}>
+              {format(new Date(weddingDate), "dd MMMM yyyy", { locale: nl })}
+            </Text>
+          </View>
+        ) : null}
+      </View>
 
       {/* Task Input */}
       <View style={styles.inputContainer}>
@@ -1134,7 +1144,6 @@ export default function ChecklistScreen() {
         renderSectionHeader={renderSectionHeader}
         keyExtractor={(item) => item.id}
         stickySectionHeadersEnabled={true}
-        ListHeaderComponent={<Text style={styles.listHeader}>To do's</Text>}
         ListEmptyComponent={
           <Text style={styles.emptyText}>
             {allTasks.length > 0
@@ -1547,5 +1556,48 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
+  },
+  //---new styles for header----
+  headerWrap: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 18,
+  },
+  brandHeading: {
+    // Serif + ruim gespatieerd, in lijn met de screenshot
+    fontSize: 14,
+    letterSpacing: 6,
+    textTransform: "uppercase",
+    color: "#2F2F2F",
+    // system serif fallback
+    fontFamily: Platform.select({
+      ios: "Times New Roman",
+      android: "serif",
+      default: "serif",
+    }),
+    marginBottom: 6,
+  },
+  appHeading: {
+    fontSize: 22,
+    letterSpacing: 3,
+    textTransform: "uppercase",
+    color: "#333",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  datePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "transparent",
+    borderRadius: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    marginTop: 8,
+  },
+  datePillText: {
+    color: "#DA6F57",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });
